@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { formatDate, getDaysUntil } from '@/lib/utils';
 
 export const revalidate = 0;
+export const runtime = 'edge';
 
 // 型定義に avatar_url を追加
 type Event = {
