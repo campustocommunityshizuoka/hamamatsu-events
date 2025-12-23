@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils'; // 作成したutilsを使用
 
 export const runtime = 'edge';
+export const revalidate = 0;
 
 // 型定義
 type Event = {
