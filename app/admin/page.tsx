@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export const runtime = 'edge';
 
 // イベント情報の型定義
 type Event = {
