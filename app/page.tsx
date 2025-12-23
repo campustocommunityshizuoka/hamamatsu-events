@@ -4,6 +4,7 @@ import { formatDate, getDaysUntil } from '@/lib/utils';
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 // 型定義に avatar_url を追加
 type Event = {
