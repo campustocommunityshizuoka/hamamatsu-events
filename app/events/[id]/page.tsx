@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils'; // 作成したutilsを使用
 
+export const runtime = 'edge';
+
 // 型定義
 type Event = {
   id: number;
