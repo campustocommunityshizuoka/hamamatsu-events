@@ -1,65 +1,127 @@
-import Image from "next/image";
+import { supabase } from '@/lib/supabaseClient';
+import Link from 'next/link';
+import { formatDate, getDaysUntil } from '@/lib/utils';
 
-export default function Home() {
+// 型定義に avatar_url を追加
+type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  location: string | null;
+  image_url: string | null;
+  profiles: {
+    name: string | null;
+    avatar_url: string | null; // 追加
+  } | null;
+};
+
+async function getEvents(): Promise<Event[]> {
+  const today = new Date().toISOString().split('T')[0];
+  const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('events')
+    .select(`
+      id, title, event_date, location, image_url,
+      profiles ( name, avatar_url ) 
+    `) // avatar_url も一緒に取得
+    .gte('event_date', today)
+    .lte('event_date', twoWeeksLater)
+    .order('event_date', { ascending: true });
+
+  if (error) {
+    console.error(error);
+    return [];
+  }
+  return data as unknown as Event[];
+}
+
+export default async function Home() {
+  const events = await getEvents();
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-gray-100 pb-20 font-sans">
+      <header className="bg-orange-500 text-white p-4 text-center shadow sticky top-0 z-20">
+        <h1 className="text-2xl font-bold">浜松イベント情報</h1>
+        <p className="text-xs mt-1 opacity-90">地域の催し物がすぐわかる</p>
+      </header>
+
+      <div className="max-w-md mx-auto md:max-w-4xl p-2">
+        {events.length === 0 && (
+          <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm">
+            <p className="text-xl text-gray-600 mb-2">現在、予定されている<br/>イベントはありません。</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+          {events.map((event) => {
+            const statusLabel = getDaysUntil(event.event_date);
+            const posterName = event.profiles?.name || '主催者不明';
+            const posterIcon = event.profiles?.avatar_url; // アイコンURL
+            
+            return (
+              <Link key={event.id} href={`/events/${event.id}`} className="block group">
+                <div className="bg-white rounded-2xl shadow-md overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-gray-200">
+                  
+                  {/* 画像エリア */}
+                  <div className="relative aspect-[4/3] bg-gray-200">
+                    {event.image_url ? (
+                      <img 
+                        src={event.image_url} 
+                        alt={event.title} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-500 text-lg font-bold">
+                        画像なし
+                      </div>
+                    )}
+                    
+                    {statusLabel && (
+                      <span className="absolute top-2 right-2 bg-red-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow">
+                        {statusLabel}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 情報エリア */}
+                  <div className="p-4">
+                    <p className="text-orange-600 font-bold text-lg mb-1">
+                      📅 {formatDate(event.event_date)}
+                    </p>
+                    
+                    <h2 className="text-2xl font-bold text-gray-800 leading-tight mb-3">
+                      {event.title}
+                    </h2>
+                    
+                    <div className="text-gray-500 text-sm space-y-2">
+                      <p>📍 {event.location || '場所の記載なし'}</p>
+                      
+                      {/* ▼▼ アイコンと団体名を表示 ▼▼ */}
+                      <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg">
+                        {/* アイコン画像（なければグレーの丸） */}
+                        <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 border border-gray-200">
+                          {posterIcon ? (
+                            <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
+                          ) : (
+                            /* デフォルトアイコン（SVG） */
+                            <svg className="w-full h-full text-gray-500 p-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="font-bold text-gray-700">{posterName}</span>
+                      </div>
+                      {/* ▲▲ ここまで ▲▲ */}
+
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
