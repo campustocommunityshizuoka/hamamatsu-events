@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 // 地域の選択肢
@@ -17,22 +17,67 @@ const AREA_OPTIONS = [
   "天竜区（旧天竜区）"
 ];
 
+// メインコンポーネント（Suspenseでラップする）
 export default function CreateEventPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center">読み込み中...</div>}>
+      <CreateEventForm />
+    </Suspense>
+  );
+}
+
+function CreateEventForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const copyFromId = searchParams.get('copy_from'); // コピー元のIDを取得
+
   const [loading, setLoading] = useState(false);
 
   // 入力項目のステート
   const [title, setTitle] = useState('');
-  const [area, setArea] = useState(''); // 地域を追加
+  const [area, setArea] = useState(''); 
   const [date, setDate] = useState('');
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
 
+  // ▼▼▼ コピー機能の追加 ▼▼▼
+  useEffect(() => {
+    if (!copyFromId) return;
+
+    const fetchSourceEvent = async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', copyFromId)
+        .single();
+
+      if (error) {
+        console.error('コピー元の取得に失敗', error);
+        return;
+      }
+
+      if (data) {
+        setTitle(data.title);
+        setArea(data.area || '');
+        setLocation(data.location || '');
+        setPhone(data.contact_phone || '');
+        setDescription(data.description || '');
+        // 日付と画像は新規設定させるため、あえてコピーしません
+        // (必要であれば setDate(data.event_date) を追加してください)
+        
+        // ユーザーに通知（任意）
+        // alert('過去のイベント内容をコピーしました。\n日付と写真を設定してください。');
+      }
+    };
+
+    fetchSourceEvent();
+  }, [copyFromId]);
+  // ▲▲▲ ここまで ▲▲▲
+
   // 画像アップロード処理
   const uploadImage = async (file: File) => {
-    // ファイル名をランダムにして重複を防ぐ
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
     const filePath = `${fileName}`;
@@ -45,7 +90,6 @@ export default function CreateEventPage() {
       throw uploadError;
     }
 
-    // 公開URLを取得
     const { data } = supabase.storage
       .from('event-images')
       .getPublicUrl(filePath);
@@ -66,7 +110,7 @@ export default function CreateEventPage() {
     setLoading(true);
 
     try {
-      // 1. ユーザー情報を取得（誰が投稿したか）
+      // 1. ユーザー情報を取得
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('ログインしてください');
 
@@ -81,19 +125,19 @@ export default function CreateEventPage() {
         .from('events')
         .insert({
           title: title,
-          area: area, // 地域を保存
+          area: area,
           event_date: date,
           location: location,
           contact_phone: phone,
           description: description,
           image_url: imageUrl,
-          poster_id: user.id, // 投稿者ID
+          poster_id: user.id,
         });
 
       if (error) throw error;
 
       alert('イベントを登録しました！');
-      router.push('/admin'); // マイページに戻る
+      router.push('/admin');
 
     } catch (error) {
       console.error(error);
@@ -106,8 +150,16 @@ export default function CreateEventPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-6 text-teal-800 text-center">新規投稿</h1>
+        <h1 className="text-2xl font-bold mb-6 text-teal-800 text-center">
+          {copyFromId ? '過去の投稿から作成' : '新規投稿'}
+        </h1>
         
+        {copyFromId && (
+          <div className="mb-6 bg-blue-50 text-blue-800 p-4 rounded-md text-sm">
+            💡 過去のイベント内容をコピーしました。日付と写真を新しく設定してください。
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           
           {/* イベント名 */}
@@ -198,7 +250,7 @@ export default function CreateEventPage() {
             )}
           </div>
 
-          {/* その他の詳細情報（折りたたみあるいは下部配置） */}
+          {/* その他の詳細情報 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">詳しい場所（会場名など）</label>

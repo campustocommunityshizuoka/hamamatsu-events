@@ -10,6 +10,7 @@
     "pages:build": "npx @cloudflare/next-on-pages@1"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.47.0",
     "next": "15.1.0",
     "react": "19.0.0",

@@ -39,6 +39,9 @@ async function getEvents(): Promise<Event[]> {
       id, title, event_date, location, area, image_url,
       profiles ( name, avatar_url ) 
     `)
+    // ▼▼ 修正点: 非表示フラグが false のものだけを取得する条件を追加 ▼▼
+    .eq('is_hidden', false) 
+    // ▲▲ ここまで ▲▲
     .gte('event_date', today)
     .lte('event_date', twoWeeksLater)
     .order('event_date', { ascending: true });
