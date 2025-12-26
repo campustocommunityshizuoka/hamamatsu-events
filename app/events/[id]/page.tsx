@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { formatDate } from '@/lib/utils'; // 作成したutilsを使用
+import { formatDate } from '@/lib/utils';
 
 export const runtime = 'edge';
 export const revalidate = 0;
@@ -17,7 +17,7 @@ type Event = {
   image_url: string | null;
   profiles: {
     name: string | null;
-    avatar_url: string | null; // 追加
+    avatar_url: string | null;
   } | null;
 };
 
@@ -75,7 +75,7 @@ export default async function EventDetailPage({
         </div>
 
         <div className="p-6 space-y-8">
-          {/* ▼▼ 主催者情報の表示エリアを追加 ▼▼ */}
+          {/* 主催者情報 */}
           <div className="flex items-center gap-3 border-b pb-4">
              <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
                {posterIcon ? (
@@ -91,7 +91,6 @@ export default async function EventDetailPage({
                <p className="text-lg font-bold text-gray-800">{posterName}</p>
              </div>
           </div>
-          {/* ▲▲ ここまで ▲▲ */}
 
           <h1 className="text-3xl font-bold text-gray-900 leading-tight">
             {event.title}
@@ -103,10 +102,46 @@ export default async function EventDetailPage({
               <span className="font-bold text-2xl">{formatDate(event.event_date)}</span>
             </div>
             
-            <div>
-              <span className="text-gray-500 text-sm block">どこで</span>
-              <span className="font-bold text-2xl">{event.location}</span>
+            {/* ▼▼▼ 地図エリア（ここを変更しました） ▼▼▼ */}
+            <div className="border-t border-b py-6 my-6">
+              <span className="text-gray-500 text-sm block mb-3">どこで</span>
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* 住所テキストエリア */}
+                <div className="flex-1">
+                   <p className="font-bold text-2xl mb-2">{event.location}</p>
+                   {/* Googleマップアプリへのリンク */}
+                   <a 
+                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location || '')}`}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
+                   >
+                     Googleマップアプリで見る
+                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                   </a>
+                </div>
+
+                {/* 地図埋め込みエリア */}
+                <div className="w-full md:w-1/2 h-64 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                  {event.location ? (
+                    <iframe
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      allowFullScreen
+                      src={`https://maps.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`}
+                      title="Google Map"
+                    ></iframe>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-400 text-base">
+                      場所情報がありません
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+            {/* ▲▲▲ 地図エリアここまで ▲▲▲ */}
 
             {event.contact_phone && (
               <div>

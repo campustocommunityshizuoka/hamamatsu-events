@@ -5,12 +5,25 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+// 地域の選択肢
+const AREA_OPTIONS = [
+  "中央区（旧中区）",
+  "中央区（旧東区）",
+  "中央区（旧西区）",
+  "中央区（旧南区）",
+  "中央区（旧北区・三方原）",
+  "浜名区（旧浜北区）",
+  "浜名区（旧北区）",
+  "天竜区（旧天竜区）"
+];
+
 export default function CreateEventPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   // 入力項目のステート
   const [title, setTitle] = useState('');
+  const [area, setArea] = useState(''); // 地域を追加
   const [date, setDate] = useState('');
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
@@ -43,10 +56,13 @@ export default function CreateEventPage() {
   // 送信処理
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !date) {
-      alert('タイトルと日付は必須です');
+    
+    // バリデーション
+    if (!title || !date || !area) {
+      alert('イベント名、地域、開催日は必須です');
       return;
     }
+
     setLoading(true);
 
     try {
@@ -65,6 +81,7 @@ export default function CreateEventPage() {
         .from('events')
         .insert({
           title: title,
+          area: area, // 地域を保存
           event_date: date,
           location: location,
           contact_phone: phone,
@@ -89,93 +106,134 @@ export default function CreateEventPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-6">新しいイベントを作る</h1>
+        <h1 className="text-2xl font-bold mb-6 text-teal-800 text-center">新規投稿</h1>
         
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 画像選択 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">写真（チラシなど）</label>
-            <input 
-              type="file" 
-              accept="image/*"
-              onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-          </div>
-
+          
           {/* イベント名 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">イベント名 <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-bold text-gray-700 mb-1">
+              活動名
+              <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
+            </label>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-              placeholder="例：秋のゲートボール大会"
+              className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
+              placeholder="例：ゲートボール大会"
             />
+          </div>
+
+          {/* 地域（プルダウン） */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">
+              地域
+              <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
+            </label>
+            <select
+              required
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-teal-500 focus:border-teal-500"
+            >
+              <option value="">選択してください</option>
+              {AREA_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* 日付 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">開催日 <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-bold text-gray-700 mb-1">
+              開催日
+              <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
+            </label>
             <input
               type="date"
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
             />
           </div>
 
-          {/* 場所 */}
+          {/* くわしい内容 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">場所</label>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-              placeholder="例：浜松城公園"
-            />
-          </div>
-
-          {/* 電話番号 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">連絡先電話番号</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-              placeholder="例：053-000-0000"
-            />
-          </div>
-
-          {/* 詳細 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">くわしい内容</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1">活動の詳しい内容...</label>
             <textarea
-              rows={5}
+              rows={6}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
               placeholder="持ち物や注意事項など..."
             />
           </div>
 
+          {/* 画像選択 */}
+          <div className="border-t pt-6 border-dashed border-gray-300">
+            <label className="block text-sm font-bold text-gray-700 mb-2 text-center">
+              写真
+              <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
+            </label>
+            <div className="flex justify-center">
+              <label className="cursor-pointer bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 px-8 rounded-full shadow-md transition-colors flex items-center gap-2">
+                <span>📷 写真を選択する</span>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            {imageFile && (
+              <p className="text-center text-sm text-gray-600 mt-2">
+                選択中: {imageFile.name}
+              </p>
+            )}
+          </div>
+
+          {/* その他の詳細情報（折りたたみあるいは下部配置） */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">詳しい場所（会場名など）</label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                placeholder="例：浜松城公園"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">連絡先電話番号</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                placeholder="例：053-000-0000"
+              />
+            </div>
+          </div>
+
           {/* ボタン */}
-          <div className="flex gap-4 pt-4">
-            <Link href="/admin" className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-gray-700">
-              キャンセル
-            </Link>
+          <div className="flex flex-col gap-4 pt-4">
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-bold disabled:opacity-50"
+              className="w-full bg-teal-800 text-white py-3 px-4 rounded-md hover:bg-teal-900 font-bold disabled:opacity-50 text-lg shadow-lg"
             >
-              {loading ? '保存中...' : '登録する'}
+              {loading ? '送信中...' : 'この内容で公開する'}
             </button>
+            <Link href="/admin" className="text-center text-gray-500 hover:text-gray-700 underline">
+              キャンセル
+            </Link>
           </div>
         </form>
       </div>
