@@ -1,0 +1,2195 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+app/admin/create/page.tsx
+app/admin/edit/[id]/page.tsx
+app/admin/page.tsx
+app/admin/profile/page.tsx
+app/error.tsx
+app/events/[id]/page.tsx
+app/favicon.ico
+app/forgot-password/page.tsx
+app/globals.css
+app/layout.tsx
+app/login/page.tsx
+app/page.tsx
+app/register/page.tsx
+app/update-password/page.tsx
+debug_code.txt
+eslint.config.mjs
+lib/supabaseClient.ts
+lib/utils.ts
+next.config.mjs
+package.json
+postcss.config.js
+public/file.svg
+public/globe.svg
+public/next.svg
+public/vercel.svg
+public/window.svg
+README.md
+tailwind.config.ts
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+</file>
+
+<file path="app/admin/create/page.tsx">
+'use client';
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+export default function CreateEventPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  // 入力項目のステート
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [location, setLocation] = useState('');
+  const [phone, setPhone] = useState('');
+  const [description, setDescription] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
+  // 画像アップロード処理
+  const uploadImage = async (file: File) => {
+    // ファイル名をランダムにして重複を防ぐ
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('event-images')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    // 公開URLを取得
+    const { data } = supabase.storage
+      .from('event-images')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  };
+
+  // 送信処理
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !date) {
+      alert('タイトルと日付は必須です');
+      return;
+    }
+    setLoading(true);
+
+    try {
+      // 1. ユーザー情報を取得（誰が投稿したか）
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('ログインしてください');
+
+      // 2. 画像があればアップロード
+      let imageUrl = null;
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
+      // 3. データベースに保存
+      const { error } = await supabase
+        .from('events')
+        .insert({
+          title: title,
+          event_date: date,
+          location: location,
+          contact_phone: phone,
+          description: description,
+          image_url: imageUrl,
+          poster_id: user.id, // 投稿者ID
+        });
+
+      if (error) throw error;
+
+      alert('イベントを登録しました！');
+      router.push('/admin'); // マイページに戻る
+
+    } catch (error) {
+      console.error(error);
+      alert('登録に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow">
+        <h1 className="text-2xl font-bold mb-6">新しいイベントを作る</h1>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* 画像選択 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">写真（チラシなど）</label>
+            <input 
+              type="file" 
+              accept="image/*"
+              onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+          </div>
+
+          {/* イベント名 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">イベント名 <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              placeholder="例：秋のゲートボール大会"
+            />
+          </div>
+
+          {/* 日付 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">開催日 <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              required
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+          </div>
+
+          {/* 場所 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">場所</label>
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              placeholder="例：浜松城公園"
+            />
+          </div>
+
+          {/* 電話番号 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">連絡先電話番号</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              placeholder="例：053-000-0000"
+            />
+          </div>
+
+          {/* 詳細 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">くわしい内容</label>
+            <textarea
+              rows={5}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              placeholder="持ち物や注意事項など..."
+            />
+          </div>
+
+          {/* ボタン */}
+          <div className="flex gap-4 pt-4">
+            <Link href="/admin" className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-gray-700">
+              キャンセル
+            </Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-bold disabled:opacity-50"
+            >
+              {loading ? '保存中...' : '登録する'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/admin/profile/page.tsx">
+'use client';
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+export default function ProfileEditPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  
+  const [name, setName] = useState('');
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
+  const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
+
+  // 1. 現在のプロフィール情報を取得
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('name, avatar_url')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error(error);
+      } else if (data) {
+        setName(data.name || '');
+        setCurrentAvatarUrl(data.avatar_url);
+      }
+      setLoading(false);
+    };
+
+    fetchProfile();
+  }, [router]);
+
+  // 画像アップロード処理
+  const uploadAvatar = async (file: File) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('No user');
+
+    // ファイル名を「ユーザーID-ランダム」にしてユニークにする
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    // アップロード
+    const { error: uploadError } = await supabase.storage
+      .from('profile-images') // アイコン用のバケット
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    // 公開URLを取得
+    const { data } = supabase.storage
+      .from('profile-images')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  };
+
+  // 2. 保存処理
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name) {
+      alert('名前は必須です');
+      return;
+    }
+    setUpdating(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+
+      // 画像があればアップロードしてURLを取得
+      let avatarUrl = currentAvatarUrl;
+      if (newAvatarFile) {
+        avatarUrl = await uploadAvatar(newAvatarFile);
+      }
+
+      // プロフィール更新
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: name,
+          avatar_url: avatarUrl,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      alert('プロフィールを更新しました！');
+      router.push('/admin'); // マイページへ戻る
+
+    } catch (error) {
+      console.error(error);
+      alert('更新に失敗しました');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loading) return <div className="p-10">読み込み中...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-xl mx-auto bg-white p-8 rounded-lg shadow">
+        <h1 className="text-2xl font-bold mb-6">プロフィールの編集</h1>
+        
+        <form onSubmit={handleSave} className="space-y-6">
+          {/* アイコン設定 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">アイコン画像</label>
+            <div className="flex items-center gap-6">
+              {/* プレビュー表示 */}
+              <div className="w-20 h-20 rounded-full bg-gray-200 border overflow-hidden flex-shrink-0">
+                {newAvatarFile ? (
+                  // 新しく選択した画像を表示
+                  <img src={URL.createObjectURL(newAvatarFile)} className="w-full h-full object-cover" />
+                ) : currentAvatarUrl ? (
+                  // 現在の画像を表示
+                  <img src={currentAvatarUrl} className="w-full h-full object-cover" />
+                ) : (
+                  // デフォルト
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Img</div>
+                )}
+              </div>
+              
+              <input 
+                type="file" 
+                accept="image/*"
+                onChange={(e) => setNewAvatarFile(e.target.files?.[0] || null)}
+                className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
+          </div>
+
+          {/* 名前設定 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">団体名・表示名 <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              placeholder="例：浜松老人会"
+            />
+          </div>
+
+          {/* ボタン */}
+          <div className="flex gap-4 pt-4">
+            <Link href="/admin" className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-gray-700">
+              キャンセル
+            </Link>
+            <button
+              type="submit"
+              disabled={updating}
+              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-bold disabled:opacity-50"
+            >
+              {updating ? '保存中...' : '変更を保存する'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/error.tsx">
+'use client';
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div className="p-10 text-center bg-white min-h-screen text-black">
+      <h2 className="text-2xl font-bold text-red-600 mb-4">エラーが発生しました</h2>
+      <p className="bg-gray-100 p-4 rounded mb-4 text-left font-mono text-sm break-all">
+        {error.message}
+      </p>
+      <button
+        onClick={() => reset()}
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+      >
+        もう一度試す
+      </button>
+    </div>
+  );
+}
+</file>
+
+<file path="app/forgot-password/page.tsx">
+'use client';
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import Link from 'next/link';
+
+export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+    setErrorMsg(null);
+
+    // Supabaseにパスワード再設定メールを要求
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`, // 再設定用ページのURL
+    });
+
+    if (error) {
+      setErrorMsg('エラーが発生しました: ' + error.message);
+    } else {
+      setMessage('再設定用のメールを送信しました。メール内のリンクをクリックしてください。');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">パスワードの再設定</h1>
+
+        {message && (
+          <div className="bg-green-100 text-green-700 p-3 rounded mb-4 text-sm">
+            {message}
+          </div>
+        )}
+        
+        {errorMsg && (
+          <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleResetRequest} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">登録メールアドレス</label>
+            <input
+              type="email"
+              required
+              placeholder="example@email.com"
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 font-bold"
+          >
+            {loading ? '送信中...' : '再設定メールを送る'}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm">
+          <Link href="/login" className="text-blue-600 hover:underline">
+            ログイン画面に戻る
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/layout.tsx">
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+</file>
+
+<file path="app/login/page.tsx">
+'use client';
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // 表示切り替え用
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg(null);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setErrorMsg('ログインに失敗しました。メールアドレスかパスワードが違います。');
+      setLoading(false);
+    } else {
+      router.push('/admin');
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">管理者ログイン</h1>
+        
+        {errorMsg && (
+          <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">メールアドレス</label>
+            <input
+              type="email"
+              required
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">パスワード</label>
+            <input
+              type={showPassword ? 'text' : 'password'} // ここで切り替え
+              required
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {/* ▼▼ パスワード表示チェックボックス ▼▼ */}
+            <div className="mt-2 flex items-center">
+              <input
+                id="show-password"
+                type="checkbox"
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                checked={showPassword}
+                onChange={() => setShowPassword(!showPassword)}
+              />
+              <label htmlFor="show-password" className="ml-2 block text-sm text-gray-700 cursor-pointer select-none">
+                パスワードを表示する
+              </label>
+            </div>
+            {/* ▲▲ ここまで ▲▲ */}
+          </div>
+          
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? '処理中...' : 'ログイン'}
+          </button>
+        </form>
+
+        <div className="mt-4 flex flex-col gap-2 text-center text-sm border-t pt-4">
+           <Link href="/forgot-password" className="text-blue-600 hover:underline">
+             パスワードを忘れた場合
+           </Link>
+           <p className="text-gray-600 mt-2">まだアカウントをお持ちでない方</p>
+           <Link href="/register" className="text-green-600 font-bold hover:underline">
+             新規会員登録はこちら
+           </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/register/page.tsx">
+'use client';
+
+import { useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // 追加
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg(null);
+
+    const location = window.location.origin;
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name: name },
+        emailRedirectTo: `${location}/admin`,
+      },
+    });
+
+    if (error) {
+      setErrorMsg('登録に失敗しました: ' + error.message);
+      setLoading(false);
+    } else {
+      if (data.user) {
+        alert('登録が完了しました！');
+        router.push('/admin');
+      } else {
+        alert('確認メールを送信しました。メール内のリンクをクリックするとマイページへ移動します。');
+        router.push('/login');
+      }
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">新規会員登録</h1>
+        
+        {errorMsg && (
+          <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleRegister} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">お名前（表示名）</label>
+            <input
+              type="text"
+              required
+              placeholder="例：浜松 太郎"
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">メールアドレス</label>
+            <input
+              type="email"
+              required
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">パスワード</label>
+            <input
+              type={showPassword ? 'text' : 'password'} // 切り替え
+              required
+              minLength={6}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {/* ▼▼ パスワード表示チェックボックス ▼▼ */}
+            <div className="mt-2 flex items-center">
+              <input
+                id="show-password-reg"
+                type="checkbox"
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                checked={showPassword}
+                onChange={() => setShowPassword(!showPassword)}
+              />
+              <label htmlFor="show-password-reg" className="ml-2 block text-sm text-gray-700 cursor-pointer select-none">
+                パスワードを表示する
+              </label>
+            </div>
+            {/* ▲▲ ここまで ▲▲ */}
+            <p className="text-xs text-gray-500 mt-2">※6文字以上で入力してください</p>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 font-bold"
+          >
+            {loading ? '登録処理中...' : '登録する'}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm">
+          <Link href="/login" className="text-blue-600 hover:underline">
+            すでにアカウントをお持ちの方はログインへ
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/update-password/page.tsx">
+'use client';
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+
+export default function UpdatePasswordPage() {
+  const router = useRouter();
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // 追加
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('無効なリンクか、期限切れです。もう一度最初からやり直してください。');
+        router.push('/forgot-password');
+      }
+    };
+    checkSession();
+  }, [router]);
+
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg(null);
+
+    const { error } = await supabase.auth.updateUser({
+      password: password,
+    });
+
+    if (error) {
+      setErrorMsg('更新に失敗しました: ' + error.message);
+      setLoading(false);
+    } else {
+      alert('パスワードを変更しました！');
+      router.push('/admin');
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">新しいパスワードの設定</h1>
+
+        {errorMsg && (
+          <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordUpdate} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">新しいパスワード</label>
+            <input
+              type={showPassword ? 'text' : 'password'} // 切り替え
+              required
+              minLength={6}
+              placeholder="6文字以上"
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {/* ▼▼ パスワード表示チェックボックス ▼▼ */}
+            <div className="mt-2 flex items-center">
+              <input
+                id="show-password-upd"
+                type="checkbox"
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                checked={showPassword}
+                onChange={() => setShowPassword(!showPassword)}
+              />
+              <label htmlFor="show-password-upd" className="ml-2 block text-sm text-gray-700 cursor-pointer select-none">
+                パスワードを表示する
+              </label>
+            </div>
+            {/* ▲▲ ここまで ▲▲ */}
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 font-bold"
+          >
+            {loading ? '更新中...' : 'パスワードを変更する'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="debug_code.txt">
+=== DEBUG INFO ===
+
+
+================ package.json ================
+{
+  "name": "hamamatsu-events",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "pages:build": "npx @cloudflare/next-on-pages"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
+    "next": "16.1.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5"
+  }
+}
+
+
+================ next.config.ts ================
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+  images: {
+    unoptimized: true,
+  },
+};
+
+export default nextConfig;
+
+
+[File Not Found]: next.config.js
+
+
+[File Not Found]: middleware.ts
+
+
+================ app/layout.tsx ================
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+
+
+================ app/page.tsx ================
+import { supabase } from '@/lib/supabaseClient';
+import Link from 'next/link';
+import { formatDate, getDaysUntil } from '@/lib/utils';
+
+export const revalidate = 0;
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
+// 蝙句ｮ夂ｾｩ縺ｫ avatar_url 繧定ｿｽ蜉
+type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  location: string | null;
+  image_url: string | null;
+  profiles: {
+    name: string | null;
+    avatar_url: string | null; // 霑ｽ蜉
+  } | null;
+};
+
+async function getEvents(): Promise<Event[]> {
+  const today = new Date().toISOString().split('T')[0];
+  const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('events')
+    .select(`
+      id, title, event_date, location, image_url,
+      profiles ( name, avatar_url ) 
+    `) // avatar_url 繧ゆｸ邱偵↓蜿門ｾ・
+    .gte('event_date', today)
+    .lte('event_date', twoWeeksLater)
+    .order('event_date', { ascending: true });
+
+  if (error) {
+    console.error(error);
+    return [];
+  }
+  return data as unknown as Event[];
+}
+
+export default async function Home() {
+  const events = await getEvents();
+
+  return (
+    <main className="min-h-screen bg-gray-100 pb-20 font-sans">
+      <header className="bg-orange-500 text-white p-4 text-center shadow sticky top-0 z-20">
+        <h1 className="text-2xl font-bold">豬懈收繧､繝吶Φ繝域ュ蝣ｱ</h1>
+        <p className="text-xs mt-1 opacity-90">蝨ｰ蝓溘・蛯ｬ縺礼黄縺後☆縺舌ｏ縺九ｋ</p>
+      </header>
+
+      <div className="max-w-md mx-auto md:max-w-4xl p-2">
+        {events.length === 0 && (
+          <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm">
+            <p className="text-xl text-gray-600 mb-2">迴ｾ蝨ｨ縲∽ｺ亥ｮ壹＆繧後※縺・ｋ<br/>繧､繝吶Φ繝医・縺ゅｊ縺ｾ縺帙ｓ縲・/p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+          {events.map((event) => {
+            const statusLabel = getDaysUntil(event.event_date);
+            const posterName = event.profiles?.name || '荳ｻ蛯ｬ閠・ｸ肴・';
+            const posterIcon = event.profiles?.avatar_url; // 繧｢繧､繧ｳ繝ｳURL
+            
+            return (
+              <Link key={event.id} href={`/events/${event.id}`} className="block group">
+                <div className="bg-white rounded-2xl shadow-md overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-gray-200">
+                  
+                  {/* 逕ｻ蜒上お繝ｪ繧｢ */}
+                  <div className="relative aspect-[4/3] bg-gray-200">
+                    {event.image_url ? (
+                      <img 
+                        src={event.image_url} 
+                        alt={event.title} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-500 text-lg font-bold">
+                        逕ｻ蜒上↑縺・
+                      </div>
+                    )}
+                    
+                    {statusLabel && (
+                      <span className="absolute top-2 right-2 bg-red-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow">
+                        {statusLabel}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 諠・ｱ繧ｨ繝ｪ繧｢ */}
+                  <div className="p-4">
+                    <p className="text-orange-600 font-bold text-lg mb-1">
+                      套 {formatDate(event.event_date)}
+                    </p>
+                    
+                    <h2 className="text-2xl font-bold text-gray-800 leading-tight mb-3">
+                      {event.title}
+                    </h2>
+                    
+                    <div className="text-gray-500 text-sm space-y-2">
+                      <p>桃 {event.location || '蝣ｴ謇縺ｮ險倩ｼ峨↑縺・}</p>
+                      
+                      {/* 笆ｼ笆ｼ 繧｢繧､繧ｳ繝ｳ縺ｨ蝗｣菴灘錐繧定｡ｨ遉ｺ 笆ｼ笆ｼ */}
+                      <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg">
+                        {/* 繧｢繧､繧ｳ繝ｳ逕ｻ蜒擾ｼ医↑縺代ｌ縺ｰ繧ｰ繝ｬ繝ｼ縺ｮ荳ｸ・・*/}
+                        <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 border border-gray-200">
+                          {posterIcon ? (
+                            <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
+                          ) : (
+                            /* 繝・ヵ繧ｩ繝ｫ繝医い繧､繧ｳ繝ｳ・・VG・・*/
+                            <svg className="w-full h-full text-gray-500 p-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="font-bold text-gray-700">{posterName}</span>
+                      </div>
+                      {/* 笆ｲ笆ｲ 縺薙％縺ｾ縺ｧ 笆ｲ笆ｲ */}
+
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+
+================ app/globals.css ================
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+</file>
+
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+</file>
+
+<file path="lib/supabaseClient.ts">
+// lib/supabaseClient.js
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
+</file>
+
+<file path="lib/utils.ts">
+// 日付を「12月25日 (水)」の形式に変換する関数
+export function formatDate(dateString: string): string {
+  if (!dateString) return '';
+  
+  const date = new Date(dateString);
+  // 日本語の曜日
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const dayOfWeek = days[date.getDay()];
+
+  return `${month}月${day}日 (${dayOfWeek})`;
+}
+
+// 開催までの日数を計算して「明日」「今日」などを返す関数
+export function getDaysUntil(dateString: string): string | null {
+  const eventDate = new Date(dateString);
+  const today = new Date();
+  
+  // 時間をリセットして日付だけで比較
+  eventDate.setHours(0,0,0,0);
+  today.setHours(0,0,0,0);
+
+  const diffTime = eventDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return '今日開催！';
+  if (diffDays === 1) return '明日開催';
+  if (diffDays < 0) return '終了';
+  
+  return `あと${diffDays}日`;
+}
+</file>
+
+<file path="next.config.mjs">
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    unoptimized: true,
+  },
+};
+
+export default nextConfig;
+</file>
+
+<file path="postcss.config.js">
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+</file>
+
+<file path="public/file.svg">
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+</file>
+
+<file path="public/globe.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+</file>
+
+<file path="public/next.svg">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+</file>
+
+<file path="public/vercel.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+</file>
+
+<file path="public/window.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+</file>
+
+<file path="README.md">
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</file>
+
+<file path="tailwind.config.ts">
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  content: [
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}", // ★この行が一番重要です（appフォルダ内を対象にする）
+  ],
+  theme: {
+    extend: {
+      backgroundImage: {
+        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+        "gradient-conic":
+          "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
+      },
+    },
+  },
+  plugins: [],
+};
+export default config;
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+</file>
+
+<file path="app/admin/edit/[id]/page.tsx">
+'use client';
+
+export const runtime = 'edge';
+
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+
+export default function EditEventPage() {
+  const router = useRouter();
+  const params = useParams(); // URLからIDを取得
+  const id = params.id;
+
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+
+  // 入力項目のステート
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [location, setLocation] = useState('');
+  const [phone, setPhone] = useState('');
+  const [description, setDescription] = useState('');
+  
+  // 画像関連
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+
+  // 1. 画面表示時に既存データを取得
+  useEffect(() => {
+    const fetchEvent = async () => {
+      if (!id) return;
+
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error(error);
+        alert('データの読み込みに失敗しました');
+        router.push('/admin');
+        return;
+      }
+
+      if (data) {
+        setTitle(data.title);
+        setDate(data.event_date);
+        setLocation(data.location || '');
+        setPhone(data.contact_phone || '');
+        setDescription(data.description || '');
+        setCurrentImageUrl(data.image_url);
+      }
+      setLoading(false);
+    };
+
+    fetchEvent();
+  }, [id, router]);
+
+  // 画像アップロード処理（新規作成と同じ）
+  const uploadImage = async (file: File) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('event-images')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('event-images')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  };
+
+  // 2. 更新ボタンが押された時の処理
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !date) {
+      alert('タイトルと日付は必須です');
+      return;
+    }
+    setUpdating(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('ログインしてください');
+
+      // 画像が新しく選ばれていればアップロード、なければ既存のまま
+      let imageUrl = currentImageUrl;
+      if (newImageFile) {
+        imageUrl = await uploadImage(newImageFile);
+      }
+
+      // データベースを更新 (Update)
+      const { error } = await supabase
+        .from('events')
+        .update({
+          title: title,
+          event_date: date,
+          location: location,
+          contact_phone: phone,
+          description: description,
+          image_url: imageUrl,
+        })
+        .eq('id', id); // IDが一致するものを更新
+
+      if (error) throw error;
+
+      alert('イベントを更新しました！');
+      router.push('/admin');
+
+    } catch (error) {
+      console.error(error);
+      alert('更新に失敗しました');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loading) return <div className="p-10">データを読み込んでいます...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow">
+        <h1 className="text-2xl font-bold mb-6">イベントの編集</h1>
+        
+        <form onSubmit={handleUpdate} className="space-y-6">
+          {/* 画像選択 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">写真</label>
+            
+            {/* 現在の画像プレビュー */}
+            {currentImageUrl && !newImageFile && (
+              <div className="mb-2 w-32 h-32 bg-gray-100 border">
+                <img src={currentImageUrl} alt="現在の画像" className="w-full h-full object-cover" />
+              </div>
+            )}
+
+            <input 
+              type="file" 
+              accept="image/*"
+              onChange={(e) => setNewImageFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+            <p className="text-xs text-gray-500 mt-1">※変更しない場合はそのままでOKです</p>
+          </div>
+
+          {/* イベント名 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">イベント名 <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+          </div>
+
+          {/* 日付 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">開催日 <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              required
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+          </div>
+
+          {/* 場所 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">場所</label>
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+          </div>
+
+          {/* 電話番号 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">連絡先電話番号</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+          </div>
+
+          {/* 詳細 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">くわしい内容</label>
+            <textarea
+              rows={5}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+          </div>
+
+          {/* ボタン */}
+          <div className="flex gap-4 pt-4">
+            <Link href="/admin" className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-gray-700">
+              キャンセル
+            </Link>
+            <button
+              type="submit"
+              disabled={updating}
+              className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 font-bold disabled:opacity-50"
+            >
+              {updating ? '更新中...' : '変更を保存する'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/globals.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+</file>
+
+<file path="app/admin/page.tsx">
+'use client';
+
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+
+// イベント情報の型定義
+type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  poster_id?: string;
+  profiles: {
+    name: string | null;
+  } | null;
+};
+
+// 自分のプロフィール情報の型
+type MyProfile = {
+  role: string;
+  name: string | null;
+  avatar_url: string | null;
+};
+
+export default function AdminDashboard() {
+  const router = useRouter();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  // 自分のプロフィール情報（アイコン表示用）
+  const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      // 1. ユーザー確認
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      setCurrentUserId(user.id);
+
+      // 2. 自分のプロフィールを取得（アイコンと名前）
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, name, avatar_url')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile) {
+        setMyProfile(profile);
+      }
+      
+      const role = profile?.role || 'poster';
+
+      // 3. イベントデータ取得
+      let query = supabase
+        .from('events')
+        .select(`
+          id, 
+          title, 
+          event_date, 
+          poster_id, 
+          profiles ( name )
+        `)
+        .order('event_date', { ascending: false });
+
+      if (role !== 'admin') {
+        query = query.eq('poster_id', user.id);
+      }
+
+      const { data, error } = await query;
+      
+      if (!error && data) {
+        setEvents(data as unknown as Event[]);
+      }
+      setLoading(false);
+    };
+
+    fetchEvents();
+  }, [router]);
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('本当に削除してもよろしいですか？')) return;
+
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('削除に失敗しました');
+    } else {
+      alert('削除しました');
+      setEvents((prev) => prev.filter((e) => e.id !== id));
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  const groupEventsByPoster = (targetEvents: Event[]) => {
+    const grouped: Record<string, Event[]> = {};
+    targetEvents.forEach((event) => {
+      const posterName = event.profiles?.name || '不明な団体';
+      if (!grouped[posterName]) {
+        grouped[posterName] = [];
+      }
+      grouped[posterName].push(event);
+    });
+    return grouped;
+  };
+
+  if (loading) return <div className="p-10">読み込み中...</div>;
+
+  const myEvents = myProfile?.role === 'admin' ? events.filter(e => e.poster_id === currentUserId) : [];
+  const otherEvents = myProfile?.role === 'admin' ? events.filter(e => e.poster_id !== currentUserId) : [];
+  const groupedOtherEvents = groupEventsByPoster(otherEvents);
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-4xl mx-auto">
+        
+        {/* ▼▼ ヘッダーエリア（プロフィール表示を追加） ▼▼ */}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-6 rounded-xl shadow-sm">
+          <div className="flex items-center gap-4">
+            {/* アイコン表示 */}
+            <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+              {myProfile?.avatar_url ? (
+                <img src={myProfile.avatar_url} alt="My Icon" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Img</div>
+              )}
+            </div>
+            
+            <div>
+              <h1 className="text-2xl font-bold">マイページ</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-gray-600 font-medium">
+                  {myProfile?.name || '名無し'} さん
+                </p>
+                {myProfile?.role === 'admin' && (
+                  <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                    全体管理者
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* プロフィール編集ボタン */}
+            <Link 
+              href="/admin/profile" 
+              className="text-sm font-bold text-gray-600 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 bg-white"
+            >
+              ⚙ プロフィール設定
+            </Link>
+            
+            <button onClick={handleLogout} className="text-sm text-red-600 underline ml-2">
+              ログアウト
+            </button>
+          </div>
+        </div>
+        {/* ▲▲ ヘッダーエリアここまで ▲▲ */}
+
+        <div className="mb-6">
+          <Link href="/admin/create" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-700 inline-block">
+            + 新しいイベントを作る
+          </Link>
+        </div>
+
+        {/* リスト表示エリア（以前と同じ） */}
+        {myProfile?.role === 'admin' ? (
+          <div className="space-y-10">
+            <div className="bg-white rounded-lg shadow overflow-hidden border-2 border-blue-100">
+              <div className="bg-blue-50 px-6 py-3 border-b border-blue-200">
+                <h3 className="font-bold text-blue-800">📌 あなた（全体管理者）の投稿</h3>
+              </div>
+              <EventTable events={myEvents} onDelete={handleDelete} emptyMessage="まだあなたの投稿はありません。" />
+            </div>
+
+            {Object.keys(groupedOtherEvents).length > 0 && (
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold text-gray-700 pl-2 border-l-4 border-gray-400">他の団体の投稿</h2>
+                {Object.entries(groupedOtherEvents).map(([posterName, groupEvents]) => (
+                  <div key={posterName} className="bg-white rounded-lg shadow overflow-hidden">
+                    <div className="bg-gray-100 px-6 py-3 border-b border-gray-200">
+                      <h3 className="font-bold text-gray-700">📂 {posterName}</h3>
+                    </div>
+                    <EventTable events={groupEvents} onDelete={handleDelete} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <EventTable events={events} onDelete={handleDelete} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EventTable({ events, onDelete, emptyMessage = "投稿がありません" }: { events: Event[], onDelete: (id: number) => void, emptyMessage?: string }) {
+  if (events.length === 0) {
+    return <div className="p-6 text-center text-gray-500">{emptyMessage}</div>;
+  }
+
+  return (
+    <table className="min-w-full divide-y divide-gray-200">
+      <thead className="bg-gray-50">
+        <tr>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">開催日</th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">イベント名</th>
+          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {events.map((event) => (
+          <tr key={event.id}>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.event_date}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+              <Link href={`/admin/edit/${event.id}`} className="hover:text-blue-600 hover:underline">
+                {event.title}
+              </Link>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <Link href={`/admin/edit/${event.id}`} className="text-indigo-600 hover:text-indigo-900 font-bold mr-4">
+                編集
+              </Link>
+              <button onClick={() => onDelete(event.id)} className="text-red-600 hover:text-red-900">
+                削除
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+</file>
+
+<file path="app/events/[id]/page.tsx">
+import { supabase } from '@/lib/supabaseClient';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { formatDate } from '@/lib/utils'; // 作成したutilsを使用
+
+export const runtime = 'edge';
+export const revalidate = 0;
+
+// 型定義
+type Event = {
+  id: number;
+  title: string;
+  description: string | null;
+  event_date: string;
+  location: string | null;
+  contact_phone: string | null;
+  image_url: string | null;
+  profiles: {
+    name: string | null;
+    avatar_url: string | null; // 追加
+  } | null;
+};
+
+async function getEvent(id: string) {
+  const { data, error } = await supabase
+    .from('events')
+    .select(`
+      *,
+      profiles ( name, avatar_url )
+    `)
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error(error);
+    return null;
+  }
+  return data as unknown as Event;
+}
+
+export default async function EventDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const event = await getEvent(id);
+
+  if (!event) return notFound();
+
+  const posterName = event.profiles?.name || '主催者不明';
+  const posterIcon = event.profiles?.avatar_url;
+
+  return (
+    <main className="min-h-screen bg-white pb-20 font-sans">
+      <div className="p-4 bg-gray-100 border-b sticky top-0 z-10">
+        <Link href="/" className="inline-flex items-center text-xl font-bold text-blue-700 py-2 px-4 border-2 border-blue-700 rounded-lg bg-white hover:bg-blue-50">
+          ← もどる
+        </Link>
+      </div>
+
+      <div className="max-w-2xl mx-auto">
+        <div className="w-full aspect-video bg-gray-200">
+          {event.image_url ? (
+            <img 
+              src={event.image_url} 
+              alt={event.title} 
+              className="w-full h-full object-contain" 
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400 text-2xl">
+              画像なし
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 space-y-8">
+          {/* ▼▼ 主催者情報の表示エリアを追加 ▼▼ */}
+          <div className="flex items-center gap-3 border-b pb-4">
+             <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
+               {posterIcon ? (
+                 <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
+               ) : (
+                 <svg className="w-full h-full text-gray-500 p-2" fill="currentColor" viewBox="0 0 24 24">
+                   <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                 </svg>
+               )}
+             </div>
+             <div>
+               <p className="text-xs text-gray-500">投稿・主催</p>
+               <p className="text-lg font-bold text-gray-800">{posterName}</p>
+             </div>
+          </div>
+          {/* ▲▲ ここまで ▲▲ */}
+
+          <h1 className="text-3xl font-bold text-gray-900 leading-tight">
+            {event.title}
+          </h1>
+
+          <div className="space-y-6 text-xl">
+            <div>
+              <span className="text-gray-500 text-sm block">いつ</span>
+              <span className="font-bold text-2xl">{formatDate(event.event_date)}</span>
+            </div>
+            
+            <div>
+              <span className="text-gray-500 text-sm block">どこで</span>
+              <span className="font-bold text-2xl">{event.location}</span>
+            </div>
+
+            {event.contact_phone && (
+              <div>
+                <span className="text-gray-500 text-sm block">連絡先</span>
+                <span className="font-bold text-2xl">{event.contact_phone}</span>
+              </div>
+            )}
+
+            <div className="bg-orange-50 p-6 rounded-xl mt-4">
+              <span className="text-gray-500 text-sm block mb-2">くわしい内容</span>
+              <p className="whitespace-pre-wrap leading-relaxed text-lg">
+                {event.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "hamamatsu-events",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "pages:build": "npx @cloudflare/next-on-pages@1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.47.0",
+    "next": "15.1.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="app/page.tsx">
+import { supabase } from '@/lib/supabaseClient';
+import Link from 'next/link';
+import { formatDate, getDaysUntil } from '@/lib/utils';
+
+export const revalidate = 0;
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
+// 型定義に avatar_url を追加
+type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  location: string | null;
+  image_url: string | null;
+  profiles: {
+    name: string | null;
+    avatar_url: string | null; // 追加
+  } | null;
+};
+
+async function getEvents(): Promise<Event[]> {
+  const today = new Date().toISOString().split('T')[0];
+  const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('events')
+    .select(`
+      id, title, event_date, location, image_url,
+      profiles ( name, avatar_url ) 
+    `) // avatar_url も一緒に取得
+    .gte('event_date', today)
+    .lte('event_date', twoWeeksLater)
+    .order('event_date', { ascending: true });
+
+  if (error) {
+    console.error(error);
+    return [];
+  }
+  return data as unknown as Event[];
+}
+
+export default async function Home() {
+  const events = await getEvents();
+
+  return (
+    <main className="min-h-screen bg-gray-100 pb-20 font-sans">
+      <header className="bg-orange-500 text-white p-4 text-center shadow sticky top-0 z-20">
+        <h1 className="text-2xl font-bold">浜松イベント情報</h1>
+        <p className="text-xs mt-1 opacity-90">地域の催し物がすぐわかる</p>
+      </header>
+
+      <div className="max-w-md mx-auto md:max-w-4xl p-2">
+        {events.length === 0 && (
+          <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm">
+            <p className="text-xl text-gray-600 mb-2">現在、予定されている<br/>イベントはありません。</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+          {events.map((event) => {
+            const statusLabel = getDaysUntil(event.event_date);
+            const posterName = event.profiles?.name || '主催者不明';
+            const posterIcon = event.profiles?.avatar_url; // アイコンURL
+            
+            return (
+              <Link key={event.id} href={`/events/${event.id}`} className="block group">
+                <div className="bg-white rounded-2xl shadow-md overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-gray-200">
+                  
+                  {/* 画像エリア */}
+                  <div className="relative aspect-[4/3] bg-gray-200">
+                    {event.image_url ? (
+                      <img 
+                        src={event.image_url} 
+                        alt={event.title} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-500 text-lg font-bold">
+                        画像なし
+                      </div>
+                    )}
+                    
+                    {statusLabel && (
+                      <span className="absolute top-2 right-2 bg-red-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow">
+                        {statusLabel}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 情報エリア */}
+                  <div className="p-4">
+                    <p className="text-orange-600 font-bold text-lg mb-1">
+                      📅 {formatDate(event.event_date)}
+                    </p>
+                    
+                    <h2 className="text-2xl font-bold text-gray-800 leading-tight mb-3">
+                      {event.title}
+                    </h2>
+                    
+                    <div className="text-gray-500 text-sm space-y-2">
+                      <p>📍 {event.location || '場所の記載なし'}</p>
+                      
+                      {/* ▼▼ アイコンと団体名を表示 ▼▼ */}
+                      <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg">
+                        {/* アイコン画像（なければグレーの丸） */}
+                        <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 border border-gray-200">
+                          {posterIcon ? (
+                            <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
+                          ) : (
+                            /* デフォルトアイコン（SVG） */
+                            <svg className="w-full h-full text-gray-500 p-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="font-bold text-gray-700">{posterName}</span>
+                      </div>
+                      {/* ▲▲ ここまで ▲▲ */}
+
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </main>
+  );
+}
+</file>
+
+</files>
