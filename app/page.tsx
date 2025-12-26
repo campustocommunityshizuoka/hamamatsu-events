@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js'; // 直接ライブラリからインポート
 import Link from 'next/link';
 import { formatDate, getDaysUntil } from '@/lib/utils';
 
@@ -15,11 +15,22 @@ type Event = {
   image_url: string | null;
   profiles: {
     name: string | null;
-    avatar_url: string | null; // 追加
+    avatar_url: string | null;
   } | null;
 };
 
 async function getEvents(): Promise<Event[]> {
+  // 【重要修正】ここでクライアントを作成することで、確実に環境変数を読み込ませます
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('Supabase environment variables are missing in getEvents!');
+    return [];
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
   const today = new Date().toISOString().split('T')[0];
   const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
@@ -28,13 +39,13 @@ async function getEvents(): Promise<Event[]> {
     .select(`
       id, title, event_date, location, image_url,
       profiles ( name, avatar_url ) 
-    `) // avatar_url も一緒に取得
+    `)
     .gte('event_date', today)
     .lte('event_date', twoWeeksLater)
     .order('event_date', { ascending: true });
 
   if (error) {
-    console.error(error);
+    console.error('Supabase Error:', error);
     return [];
   }
   return data as unknown as Event[];
@@ -54,6 +65,7 @@ export default async function Home() {
         {events.length === 0 && (
           <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm">
             <p className="text-xl text-gray-600 mb-2">現在、予定されている<br/>イベントはありません。</p>
+            {/* デバッグ用に、万が一データが取れなかった場合にメッセージを出すことも可能です */}
           </div>
         )}
 
