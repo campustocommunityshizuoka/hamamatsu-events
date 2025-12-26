@@ -3,7 +3,6 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-// ▼▼ 修正点: 元のクライアント（localStorageを見る設定）に戻します ▼▼
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -36,16 +35,35 @@ export default function EditEventPage() {
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
   
+  // ★追加: 権限チェックとメッセージ送信用
+  const [posterId, setPosterId] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   // 画像関連
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
 
   // 1. 画面表示時に既存データを取得
   useEffect(() => {
-    const fetchEvent = async () => {
+    const fetchEventAndProfile = async () => {
       if (!id) return;
 
       try {
+        // A. ユーザー情報の取得
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+          // プロフィールのロールを取得
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+          if (profile) setMyRole(profile.role);
+        }
+
+        // B. イベント情報の取得
         const { data, error } = await supabase
           .from('events')
           .select('*')
@@ -62,6 +80,7 @@ export default function EditEventPage() {
           setPhone(data.contact_phone || '');
           setDescription(data.description || '');
           setCurrentImageUrl(data.image_url);
+          setPosterId(data.poster_id); // ★投稿者IDを保存
         }
       } catch (error) {
         console.error('データ取得エラー:', error);
@@ -72,7 +91,7 @@ export default function EditEventPage() {
       }
     };
 
-    fetchEvent();
+    fetchEventAndProfile();
   }, [id, router]);
 
   // 画像アップロード処理
@@ -111,15 +130,23 @@ export default function EditEventPage() {
 
     if (!confirm('この内容で更新しますか？')) return;
 
+    // ★追加: メッセージ送信用の理由入力ロジック
+    let editReason = '';
+    const isEditingOthersPost = posterId && posterId !== currentUserId;
+    const hasAdminPrivileges = ['admin', 'super_admin'].includes(myRole || '');
+
+    // 管理者が他人の投稿を編集する場合のみ理由を聞く
+    if (hasAdminPrivileges && isEditingOthersPost) {
+      const input = window.prompt('【管理者操作】編集の理由を入力してユーザーに通知しますか？\n(空欄のままOKを押すと通知を送らずに更新します)');
+      // キャンセルボタンが押された場合は更新自体を中止
+      if (input === null) return;
+      editReason = input;
+    }
+
     setUpdating(true);
 
     try {
-      // ユーザーセッション確認
       const { data: { session }, error: authError } = await supabase.auth.getSession();
-      
-      // デバッグログ
-      console.log('Current User ID:', session?.user?.id);
-
       if (authError || !session) throw new Error('ログインセッションが切れました。再ログインしてください。');
 
       // 画像処理
@@ -148,7 +175,21 @@ export default function EditEventPage() {
         throw new Error(`データベースの更新に失敗しました: ${updateError.message}`);
       }
 
-      alert('イベントを更新しました！');
+      // ★追加: メッセージ送信（理由がある場合のみ）
+      if (editReason && posterId && currentUserId) {
+        const { error: msgError } = await supabase
+          .from('messages')
+          .insert({
+            sender_id: currentUserId,
+            receiver_id: posterId,
+            content: `【管理者通知】あなたの投稿「${title}」の内容が管理者により編集されました。\n\n理由: ${editReason}`
+          });
+        
+        if (msgError) console.error("メッセージ送信エラー:", msgError);
+        else alert("ユーザーに編集理由を通知しました。");
+      }
+
+      if (!editReason) alert('イベントを更新しました！');
       router.push('/admin');
 
     } catch (error: any) {
