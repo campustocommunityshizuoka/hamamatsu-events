@@ -2,6 +2,9 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   // URLから認証コード(code)を取得
   const { searchParams, origin } = new URL(request.url);

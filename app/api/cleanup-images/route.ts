@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 
 // この行を追加（ビルド時に静的生成されるのを防ぐ）
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 export async function GET(request: Request) {
   try {
