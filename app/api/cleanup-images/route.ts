@@ -1,31 +1,37 @@
-// app/api/cleanup-images/route.ts
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-// サーバーサイド専用のクライアント作成（Service Role Keyを使用）
-// 注意: このキーはサーバー側でのみ使用し、絶対にクライアント側に漏らさないこと
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // .env.localに設定が必要
-);
+// ★重要: ここで createClient していたのを削除し、関数の中に移動します
+
+// この行を追加（ビルド時に静的生成されるのを防ぐ）
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    // 1. セキュリティチェック (Cronジョブからのアクセスであることを確認)
-    // Vercel Cronなどを使う場合、Authorizationヘッダーで保護するのが一般的です
-    // 今回は簡易的に、URLパラメータにシークレットキーを持たせる方式にします
-    // 例: /api/cleanup-images?key=MY_SECRET_KEY
+    // 1. セキュリティチェック
     const { searchParams } = new URL(request.url);
     const key = searchParams.get('key');
     
+    // 環境変数がない場合のガードを入れる
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    if (!serviceRoleKey || !supabaseUrl) {
+      console.error('Environment variables missing');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
     if (key !== process.env.CRON_SECRET_KEY) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // ★修正: ここでクライアントを作成する（使う直前に作る）
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
     // 2. 昨日以前の日付を取得
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD形式
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
 
     // 3. 画像を持っていて、かつ開催日が過ぎたイベントを取得
     const { data: expiredEvents, error: fetchError } = await supabaseAdmin
@@ -46,17 +52,16 @@ export async function GET(request: Request) {
 
     expiredEvents.forEach((event) => {
       if (event.image_url) {
-        // URLからパスを抽出 ( .../event-images/xxxx.jpg -> xxxx.jpg )
         const parts = event.image_url.split('/event-images/');
         if (parts.length > 1) {
-          filesToDelete.push(parts[1]);
+          // デコード処理を入れておく
+          filesToDelete.push(decodeURIComponent(parts[1]));
           eventIdsToUpdate.push(event.id);
         }
       }
     });
 
     if (filesToDelete.length > 0) {
-      // Storageから削除
       const { error: storageError } = await supabaseAdmin
         .storage
         .from('event-images')
@@ -64,7 +69,6 @@ export async function GET(request: Request) {
 
       if (storageError) throw storageError;
 
-      // DBを更新 (image_urlをNULLにする)
       const { error: dbError } = await supabaseAdmin
         .from('events')
         .update({ image_url: null })
