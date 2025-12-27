@@ -353,6 +353,18 @@ function EventTable({
                 </button>
               )}
 
+              {/* ▼▼▼ 追加した「確認」ボタン ▼▼▼ */}
+              <Link 
+                href={`/events/${event.id}`} 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-500 hover:text-gray-900 font-bold mr-4 inline-flex items-center gap-1"
+                title="実際のページを確認（別タブで開きます）"
+              >
+                <span className="text-lg">👀</span> 確認
+              </Link>
+              {/* ▲▲▲ ここまで ▲▲▲ */}
+
               <Link 
                 href={`/admin/create?copy_from=${event.id}`} 
                 className="text-teal-600 hover:text-teal-900 font-bold mr-4 inline-flex items-center gap-1"

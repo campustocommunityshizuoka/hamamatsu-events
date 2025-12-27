@@ -12,7 +12,7 @@ export default function PostButton() {
 
     if (session) {
       // ログイン済みなら投稿画面へ
-      router.push('/admin/create');
+      router.push('/admin');
     } else {
       // 未ログインならログイン画面へ
       router.push('/login');
