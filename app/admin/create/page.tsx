@@ -4,6 +4,10 @@ import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import imageCompression from 'browser-image-compression';
+
+// ★設定: 1日あたりの投稿上限数
+const EVENT_POST_LIMIT = 5;
 
 // 地域の選択肢
 const AREA_OPTIONS = [
@@ -17,7 +21,7 @@ const AREA_OPTIONS = [
   "天竜区（旧天竜区）"
 ];
 
-// メインコンポーネント（Suspenseでラップする）
+// メインコンポーネント
 export default function CreateEventPage() {
   return (
     <Suspense fallback={<div className="p-10 text-center">読み込み中...</div>}>
@@ -29,9 +33,13 @@ export default function CreateEventPage() {
 function CreateEventForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const copyFromId = searchParams.get('copy_from'); // コピー元のIDを取得
+  const copyFromId = searchParams.get('copy_from');
 
   const [loading, setLoading] = useState(false);
+
+  // ★追加: 投稿制限管理用ステート
+  const [remainingPosts, setRemainingPosts] = useState<number | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // 入力項目のステート
   const [title, setTitle] = useState('');
@@ -42,7 +50,45 @@ function CreateEventForm() {
   const [description, setDescription] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
 
-  // ▼▼▼ コピー機能の追加 ▼▼▼
+  // ★追加: ユーザー権限と本日の投稿数を確認する
+  useEffect(() => {
+    const checkLimit = async () => {
+      // 1. ユーザー確認
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return; // ログインしていない場合は後続の処理で弾かれる
+
+      // 2. 権限確認
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      
+      const role = profile?.role || 'poster';
+      const adminFlag = ['admin', 'super_admin'].includes(role);
+      setIsAdmin(adminFlag);
+
+      // 3. 管理者でなければ、過去24時間の投稿数をカウント
+      if (!adminFlag) {
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        
+        const { count, error } = await supabase
+          .from('events')
+          .select('*', { count: 'exact', head: true }) // head:trueでデータの中身は取らず数だけ数える
+          .eq('poster_id', user.id)
+          .gte('created_at', yesterday);
+
+        if (!error && count !== null) {
+          const left = Math.max(0, EVENT_POST_LIMIT - count);
+          setRemainingPosts(left);
+        }
+      }
+    };
+
+    checkLimit();
+  }, []);
+
+  // コピー機能
   useEffect(() => {
     if (!copyFromId) return;
 
@@ -64,37 +110,47 @@ function CreateEventForm() {
         setLocation(data.location || '');
         setPhone(data.contact_phone || '');
         setDescription(data.description || '');
-        // 日付と画像は新規設定させるため、あえてコピーしません
-        // (必要であれば setDate(data.event_date) を追加してください)
-        
-        // ユーザーに通知（任意）
-        // alert('過去のイベント内容をコピーしました。\n日付と写真を設定してください。');
       }
     };
 
     fetchSourceEvent();
   }, [copyFromId]);
-  // ▲▲▲ ここまで ▲▲▲
 
-  // 画像アップロード処理
+  // 画像圧縮＆アップロード処理
   const uploadImage = async (file: File) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `${fileName}`;
+    try {
+      console.log(`圧縮前: ${(file.size / 1024).toFixed(2)} KB`);
 
-    const { error: uploadError } = await supabase.storage
-      .from('event-images')
-      .upload(filePath, file);
+      const options = {
+        maxSizeMB: 0.8,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+        initialQuality: 0.7,
+      };
 
-    if (uploadError) {
-      throw uploadError;
+      const compressedFile = await imageCompression(file, options);
+      console.log(`圧縮後: ${(compressedFile.size / 1024).toFixed(2)} KB`);
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('event-images')
+        .upload(filePath, compressedFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('event-images')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+
+    } catch (error) {
+      console.error('画像処理エラー:', error);
+      throw new Error('画像の圧縮またはアップロードに失敗しました');
     }
-
-    const { data } = supabase.storage
-      .from('event-images')
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
   };
 
   // 送信処理
@@ -107,20 +163,25 @@ function CreateEventForm() {
       return;
     }
 
+    // ★追加: 投稿制限チェック
+    if (!isAdmin && remainingPosts !== null && remainingPosts <= 0) {
+      alert(`本日の投稿上限（${EVENT_POST_LIMIT}件）に達しています。\n明日また投稿してください。`);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // 1. ユーザー情報を取得
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('ログインしてください');
 
-      // 2. 画像があればアップロード
+      // 画像があれば圧縮してアップロード
       let imageUrl = null;
       if (imageFile) {
         imageUrl = await uploadImage(imageFile);
       }
 
-      // 3. データベースに保存
+      // データベースに保存
       const { error } = await supabase
         .from('events')
         .insert({
@@ -147,6 +208,9 @@ function CreateEventForm() {
     }
   };
 
+  // 上限到達フラグ
+  const isLimitReached = !isAdmin && remainingPosts !== null && remainingPosts <= 0;
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow">
@@ -154,6 +218,21 @@ function CreateEventForm() {
           {copyFromId ? '過去の投稿から作成' : '新規投稿'}
         </h1>
         
+        {/* ★追加: 残り投稿可能数の表示 */}
+        {!isAdmin && remainingPosts !== null && (
+          <div className={`mb-6 p-4 rounded-md text-sm border ${
+            remainingPosts > 0 
+              ? 'bg-blue-50 border-blue-200 text-blue-800' 
+              : 'bg-red-50 border-red-200 text-red-800 font-bold'
+          }`}>
+            {remainingPosts > 0 ? (
+               <>本日あと <span className="font-bold text-lg">{remainingPosts}</span> 件投稿できます。</>
+            ) : (
+               <>⚠️ 本日の投稿上限（{EVENT_POST_LIMIT}件）に達しました。明日また投稿してください。</>
+            )}
+          </div>
+        )}
+
         {copyFromId && (
           <div className="mb-6 bg-blue-50 text-blue-800 p-4 rounded-md text-sm">
             💡 過去のイベント内容をコピーしました。日付と写真を新しく設定してください。
@@ -175,6 +254,7 @@ function CreateEventForm() {
               onChange={(e) => setTitle(e.target.value)}
               className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
               placeholder="例：ゲートボール大会"
+              disabled={isLimitReached}
             />
           </div>
 
@@ -189,6 +269,7 @@ function CreateEventForm() {
               value={area}
               onChange={(e) => setArea(e.target.value)}
               className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-teal-500 focus:border-teal-500"
+              disabled={isLimitReached}
             >
               <option value="">選択してください</option>
               {AREA_OPTIONS.map((option) => (
@@ -211,6 +292,7 @@ function CreateEventForm() {
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
+              disabled={isLimitReached}
             />
           </div>
 
@@ -223,6 +305,7 @@ function CreateEventForm() {
               onChange={(e) => setDescription(e.target.value)}
               className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
               placeholder="持ち物や注意事項など..."
+              disabled={isLimitReached}
             />
           </div>
 
@@ -233,13 +316,14 @@ function CreateEventForm() {
               <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
             </label>
             <div className="flex justify-center">
-              <label className="cursor-pointer bg-orange-400 hover:bg-orange-500 text-white font-bold py-3 px-8 rounded-full shadow-md transition-colors flex items-center gap-2">
+              <label className={`cursor-pointer text-white font-bold py-3 px-8 rounded-full shadow-md transition-colors flex items-center gap-2 ${isLimitReached ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-400 hover:bg-orange-500'}`}>
                 <span>📷 写真を選択する</span>
                 <input 
                   type="file" 
                   accept="image/*"
                   onChange={(e) => setImageFile(e.target.files?.[0] || null)}
                   className="hidden"
+                  disabled={isLimitReached}
                 />
               </label>
             </div>
@@ -248,6 +332,9 @@ function CreateEventForm() {
                 選択中: {imageFile.name}
               </p>
             )}
+            <p className="text-center text-xs text-gray-400 mt-2">
+              ※画像は自動的に軽量化されてアップロードされます
+            </p>
           </div>
 
           {/* その他の詳細情報 */}
@@ -260,6 +347,7 @@ function CreateEventForm() {
                 onChange={(e) => setLocation(e.target.value)}
                 className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
                 placeholder="例：浜松城公園"
+                disabled={isLimitReached}
               />
             </div>
             <div>
@@ -270,6 +358,7 @@ function CreateEventForm() {
                 onChange={(e) => setPhone(e.target.value)}
                 className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
                 placeholder="例：053-000-0000"
+                disabled={isLimitReached}
               />
             </div>
           </div>
@@ -278,8 +367,8 @@ function CreateEventForm() {
           <div className="flex flex-col gap-4 pt-4">
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-teal-800 text-white py-3 px-4 rounded-md hover:bg-teal-900 font-bold disabled:opacity-50 text-lg shadow-lg"
+              disabled={loading || isLimitReached}
+              className="w-full bg-teal-800 text-white py-3 px-4 rounded-md hover:bg-teal-900 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-lg shadow-lg"
             >
               {loading ? '送信中...' : 'この内容で公開する'}
             </button>

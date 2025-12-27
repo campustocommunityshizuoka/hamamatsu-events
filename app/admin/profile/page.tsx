@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import imageCompression from 'browser-image-compression';
 
 export default function ProfileEditPage() {
   const router = useRouter();
@@ -13,8 +14,8 @@ export default function ProfileEditPage() {
   const [name, setName] = useState('');
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
   const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
+  const [mySearchId, setMySearchId] = useState<string | null>(null);
 
-  // 1. 現在のプロフィール情報を取得
   useEffect(() => {
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -25,7 +26,7 @@ export default function ProfileEditPage() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('name, avatar_url')
+        .select('name, avatar_url, search_id')
         .eq('id', user.id)
         .single();
 
@@ -34,6 +35,7 @@ export default function ProfileEditPage() {
       } else if (data) {
         setName(data.name || '');
         setCurrentAvatarUrl(data.avatar_url);
+        setMySearchId(data.search_id);
       }
       setLoading(false);
     };
@@ -41,35 +43,74 @@ export default function ProfileEditPage() {
     fetchProfile();
   }, [router]);
 
-  // 画像アップロード処理
-  const uploadAvatar = async (file: File) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('No user');
-
-    // ファイル名を「ユーザーID-ランダム」にしてユニークにする
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `${fileName}`;
-
-    // アップロード
-    const { error: uploadError } = await supabase.storage
-      .from('profile-images') // アイコン用のバケット
-      .upload(filePath, file, { upsert: true });
-
-    if (uploadError) throw uploadError;
-
-    // 公開URLを取得
-    const { data } = supabase.storage
-      .from('profile-images')
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
+  // ★追加: URLからファイルパスを抽出するヘルパー関数
+  const getFilePathFromUrl = (url: string) => {
+    try {
+      // URL例: .../profile-images/userId-random.jpg
+      const parts = url.split('/profile-images/');
+      if (parts.length > 1) {
+        return decodeURIComponent(parts[1]); // 日本語ファイル名対応
+      }
+      return null;
+    } catch (e) {
+      console.error('パス解析エラー', e);
+      return null;
+    }
   };
 
-  // 2. 保存処理
+  const generateSearchId = (str: string) => {
+    return str
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[\s\t_.\-,]/g, '')
+      .replace(/ン/g, 'ソ')
+      .replace(/シ/g, 'ツ')
+      .replace(/口/g, 'ロ')
+      .replace(/ー/g, '-');
+  };
+
+  const uploadAvatar = async (file: File) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user');
+
+      console.log(`アイコン圧縮前: ${(file.size / 1024).toFixed(2)} KB`);
+
+      const options = {
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 800,
+        useWebWorker: true,
+        initialQuality: 0.7,
+      };
+
+      const compressedFile = await imageCompression(file, options);
+      console.log(`アイコン圧縮後: ${(compressedFile.size / 1024).toFixed(2)} KB`);
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images') 
+        .upload(filePath, compressedFile, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+
+    } catch (error) {
+      console.error('アイコン画像の処理エラー:', error);
+      throw error;
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) {
+    if (!name.trim()) {
       alert('名前は必須です');
       return;
     }
@@ -79,30 +120,102 @@ export default function ProfileEditPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not logged in');
 
-      // 画像があればアップロードしてURLを取得
-      let avatarUrl = currentAvatarUrl;
-      if (newAvatarFile) {
-        avatarUrl = await uploadAvatar(newAvatarFile);
+      const newSearchId = generateSearchId(name);
+
+      if (newSearchId.length < 2) {
+        alert('名前が短すぎます。記号などを除いて2文字以上にしてください。');
+        setUpdating(false);
+        return;
       }
 
-      // プロフィール更新
+      if (newSearchId !== mySearchId) {
+        const { data: isExists, error: rpcError } = await supabase
+          .rpc('check_search_id_exists', { target_id: newSearchId });
+
+        if (rpcError) throw rpcError;
+
+        if (isExists) {
+          alert('この名前（または酷似した名前）は既に使用されています。\n別の名前を入力してください。');
+          setUpdating(false);
+          return;
+        }
+      }
+
+      let avatarUrl = currentAvatarUrl;
+      
+      // 新しい画像が選択されている場合
+      if (newAvatarFile) {
+        // 1. 新しい画像をアップロード
+        avatarUrl = await uploadAvatar(newAvatarFile);
+
+        // 2. ★追加: 古い画像があれば削除
+        if (currentAvatarUrl) {
+          const oldFilePath = getFilePathFromUrl(currentAvatarUrl);
+          if (oldFilePath) {
+            const { error: deleteError } = await supabase.storage
+              .from('profile-images')
+              .remove([oldFilePath]);
+            
+            if (deleteError) {
+              console.error('旧アイコン削除失敗:', deleteError);
+            } else {
+              console.log('旧アイコンを削除しました:', oldFilePath);
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update({
           name: name,
           avatar_url: avatarUrl,
+          search_id: newSearchId,
         })
         .eq('id', user.id);
 
       if (error) throw error;
 
+      setMySearchId(newSearchId);
+      // 更新成功後に現在のURLを更新（次回変更時に今回の画像を消せるように）
+      setCurrentAvatarUrl(avatarUrl); 
+      setNewAvatarFile(null); // ファイル選択状態をリセット
+
       alert('プロフィールを更新しました！');
-      router.push('/admin'); // マイページへ戻る
+      router.push('/admin');
 
     } catch (error) {
       console.error(error);
       alert('更新に失敗しました');
     } finally {
+      setUpdating(false);
+    }
+  };
+
+  // アカウント削除処理
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('【警告】本当にアカウントを削除しますか？\n\n投稿したイベント、メッセージ、画像など全てのデータが完全に削除され、復元することはできません。')) {
+      return;
+    }
+    
+    if (!window.confirm('本当によろしいですか？この操作は取り消せません。')) {
+      return;
+    }
+
+    setUpdating(true);
+
+    try {
+      const { error } = await supabase.rpc('delete_own_account');
+
+      if (error) throw error;
+
+      await supabase.auth.signOut();
+      alert('アカウントを削除しました。ご利用ありがとうございました。');
+      router.push('/');
+
+    } catch (error) {
+      console.error('削除エラー:', error);
+      alert('アカウントの削除に失敗しました。時間をおいて再度お試しください。');
       setUpdating(false);
     }
   };
@@ -119,26 +232,25 @@ export default function ProfileEditPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">アイコン画像</label>
             <div className="flex items-center gap-6">
-              {/* プレビュー表示 */}
-              <div className="w-20 h-20 rounded-full bg-gray-200 border overflow-hidden flex-shrink-0">
+              <div className="w-20 h-20 rounded-full bg-gray-200 border overflow-hidden flex-shrink-0 relative">
                 {newAvatarFile ? (
-                  // 新しく選択した画像を表示
-                  <img src={URL.createObjectURL(newAvatarFile)} className="w-full h-full object-cover" />
+                  <img src={URL.createObjectURL(newAvatarFile)} className="w-full h-full object-cover" alt="New Avatar" />
                 ) : currentAvatarUrl ? (
-                  // 現在の画像を表示
-                  <img src={currentAvatarUrl} className="w-full h-full object-cover" />
+                  <img src={currentAvatarUrl} className="w-full h-full object-cover" alt="Current Avatar" />
                 ) : (
-                  // デフォルト
                   <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Img</div>
                 )}
               </div>
               
-              <input 
-                type="file" 
-                accept="image/*"
-                onChange={(e) => setNewAvatarFile(e.target.files?.[0] || null)}
-                className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
+              <div className="flex-1">
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={(e) => setNewAvatarFile(e.target.files?.[0] || null)}
+                  className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full"
+                />
+                <p className="text-xs text-gray-400 mt-2">※画像は自動的に軽量化されます</p>
+              </div>
             </div>
           </div>
 
@@ -153,10 +265,13 @@ export default function ProfileEditPage() {
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
               placeholder="例：浜松老人会"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              ※すでに存在する名前や、紛らわしい名前には変更できません。
+            </p>
           </div>
 
           {/* ボタン */}
-          <div className="flex gap-4 pt-4">
+          <div className="flex gap-4 pt-4 pb-8 border-b border-gray-200">
             <Link href="/admin" className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-gray-700">
               キャンセル
             </Link>
@@ -169,6 +284,22 @@ export default function ProfileEditPage() {
             </button>
           </div>
         </form>
+
+        {/* アカウント削除エリア */}
+        <div className="mt-8 pt-4">
+          <h3 className="text-sm font-bold text-gray-900 mb-2">アカウントの管理</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            一度アカウントを削除すると、投稿したイベントやメッセージなど全てのデータが消去され、元に戻すことはできません。
+          </p>
+          <button
+            onClick={handleDeleteAccount}
+            disabled={updating}
+            className="text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 px-4 py-2 rounded text-sm font-bold w-full md:w-auto"
+          >
+            アカウントを削除する
+          </button>
+        </div>
+
       </div>
     </div>
   );

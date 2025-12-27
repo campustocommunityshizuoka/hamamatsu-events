@@ -14,6 +14,7 @@ type Event = {
   poster_id?: string;
   view_count?: number;
   is_hidden: boolean;
+  image_url: string | null; // ★追加: 削除時に必要なため
   profiles: {
     name: string | null;
   } | null;
@@ -86,8 +87,9 @@ export default function AdminDashboard() {
           poster_id,
           view_count,
           is_hidden, 
+          image_url, 
           profiles ( name )
-        `)
+        `) // ★追加: image_url を取得
         .order('event_date', { ascending: false });
 
       if (!hasAdminPrivileges) {
@@ -98,7 +100,7 @@ export default function AdminDashboard() {
       if (eventsError) console.error("データ取得エラー:", eventsError);
       if (eventsData) setEvents(eventsData as unknown as Event[]);
 
-      // 4. メッセージ取得（★修正: 最新100件に制限して負荷対策）
+      // 4. メッセージ取得
       const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
         .select(`
@@ -107,7 +109,7 @@ export default function AdminDashboard() {
         `)
         .eq('receiver_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(100); // ★ここを追加
+        .limit(100);
 
       if (messagesError) console.error("メッセージ取得エラー:", messagesError);
       if (messagesData) setMessages(messagesData as unknown as Message[]);
@@ -147,7 +149,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // ★追加: メッセージを削除する処理
+  // メッセージを削除する処理
   const deleteMessage = async (messageId: string) => {
     if (!confirm('このメッセージを削除してもよろしいですか？')) return;
 
@@ -159,12 +161,25 @@ export default function AdminDashboard() {
 
       if (error) throw error;
 
-      // 画面から消す
       setMessages(prev => prev.filter(msg => msg.id !== messageId));
       
     } catch (err) {
       console.error("削除エラー:", err);
       alert('メッセージの削除に失敗しました。');
+    }
+  };
+
+  // ★追加: 画像パス解析用のヘルパー関数
+  const getFilePathFromUrl = (url: string) => {
+    try {
+      const parts = url.split('/event-images/');
+      if (parts.length > 1) {
+        return decodeURIComponent(parts[1]);
+      }
+      return null;
+    } catch (e) {
+      console.error('パス解析エラー', e);
+      return null;
     }
   };
 
@@ -182,6 +197,26 @@ export default function AdminDashboard() {
     }
 
     try {
+      // ★追加: 削除前に画像のURLを取得してStorageから削除
+      // (eventsステートから該当イベントを探す)
+      const targetEvent = events.find(e => e.id === id);
+      
+      if (targetEvent?.image_url) {
+        const filePath = getFilePathFromUrl(targetEvent.image_url);
+        if (filePath) {
+          const { error: storageError } = await supabase.storage
+            .from('event-images')
+            .remove([filePath]);
+          
+          if (storageError) {
+            console.error('画像削除エラー(処理は続行):', storageError);
+          } else {
+            console.log('画像を削除しました:', filePath);
+          }
+        }
+      }
+
+      // DBから削除
       const { error, data } = await supabase
         .from('events')
         .delete()
@@ -355,7 +390,6 @@ export default function AdminDashboard() {
 
               {showMessages && (
                 <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50 flex flex-col max-h-[60vh]">
-                  {/* ★修正: max-h-[60vh] で画面高さに追従させ、バグを防ぐ */}
                   
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
                     <h3 className="font-bold text-gray-700 text-sm">お知らせ ({messages.length})</h3>
@@ -378,12 +412,10 @@ export default function AdminDashboard() {
                               </span>
                             </div>
                             <p className="text-sm text-gray-800 whitespace-pre-wrap mb-3 break-words">
-                              {/* break-wordsで行の折り返しを保証 */}
                               {msg.content}
                             </p>
                             
                             <div className="flex justify-end items-center gap-3">
-                              {/* 削除ボタン（ゴミ箱） */}
                               <button 
                                 onClick={() => deleteMessage(msg.id)}
                                 className="text-gray-400 hover:text-red-600 transition-colors"
@@ -392,7 +424,6 @@ export default function AdminDashboard() {
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                               </button>
 
-                              {/* 既読ボタン */}
                               {!msg.is_read && (
                                 <button 
                                   onClick={() => markAsRead(msg.id)}
@@ -553,18 +584,6 @@ function EventTable({
                 </button>
               )}
 
-              {/* ▼▼▼ 追加した「確認」ボタン ▼▼▼ */}
-              <Link 
-                href={`/events/${event.id}`} 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-gray-900 font-bold mr-4 inline-flex items-center gap-1"
-                title="実際のページを確認（別タブで開きます）"
-              >
-                <span className="text-lg">👀</span> 確認
-              </Link>
-              {/* ▲▲▲ ここまで ▲▲▲ */}
-
               <Link 
                 href={`/events/${event.id}`} 
                 target="_blank"
@@ -572,7 +591,7 @@ function EventTable({
                 className="text-gray-500 hover:text-gray-900 font-bold mr-4 inline-flex items-center gap-1"
                 title="実際のページを確認"
               >
-                <span className="text-lg">👀</span> 確認
+                確認
               </Link>
 
               <Link 
