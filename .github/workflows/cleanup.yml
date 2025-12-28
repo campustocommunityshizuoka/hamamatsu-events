@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+  # ▼▼▼ これを追加すると、保存(Commit)した瞬間に実行されます ▼▼▼
+  push:
+    branches:
+      - main
 
 jobs:
   cleanup:
@@ -11,5 +15,5 @@ jobs:
     steps:
       - name: Call Cleanup API
         run: |
-          # Mozilla(Chrome)のふりをしてアクセスする設定
+          # Mozilla(Chrome)のふりをしてアクセスする設定（重要）
           curl -v -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
