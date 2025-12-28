@@ -6,16 +6,14 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  // URLから認証コード(code)を取得
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  
-  // 認証後にリダイレクトさせたい先（デフォルトはトップページ）
+  // 認証後にリダイレクトさせたい先
   const next = searchParams.get('next') ?? '/';
 
   if (code) {
-    // Cookieを操作するための準備
-    const cookieStore = request.cookies;
+    // 1. 先にリダイレクト先のレスポンスオブジェクトを作成します
+    const response = NextResponse.redirect(`${origin}${next}`);
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,28 +21,35 @@ export async function GET(request: NextRequest) {
       {
         cookies: {
           get(name: string) {
-            return cookieStore.get(name)?.value;
+            return request.cookies.get(name)?.value;
           },
+          // 2. 作成したレスポンスに対してCookieを設定します
           set(name: string, value: string, options: CookieOptions) {
-            // ここはルートハンドラーなのでレスポンスでCookieを設定する準備が必要ですが、
-            // exchangeCodeForSession内で処理されます
+            response.cookies.set({
+              name,
+              value,
+              ...options,
+            });
           },
           remove(name: string, options: CookieOptions) {
-            // 同上
+            response.cookies.set({
+              name,
+              value: '',
+              ...options,
+            });
           },
         },
       }
     );
 
-    // 認証コードをセッション（ログイン状態）に交換する
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      // 成功したら、指定されたページ（トップページなど）へ転送
-      return NextResponse.redirect(`${origin}${next}`);
+      // 3. Cookie設定済みのレスポンスを返します
+      return response;
     }
   }
 
-  // エラー時やコードがない場合はエラー画面やログイン画面へ
+  // エラー等の場合
   return NextResponse.redirect(`${origin}/auth/auth-code-error`);
 }

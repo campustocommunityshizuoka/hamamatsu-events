@@ -1,0 +1,18 @@
+name: Cleanup Old Images
+
+on:
+  schedule:
+    # 毎日 日本時間 朝9:00 (UTC 0:00) に実行
+    - cron: '0 0 * * *'
+  # 手動で実行ボタンを押せるようにする設定
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Cleanup API
+        run: |
+          # サイトのURLとキーを使ってAPIを叩く
+          # --fail オプションで、ステータスコードが400以上の場合はエラーにする
+          curl --fail -X GET "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
