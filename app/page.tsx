@@ -63,7 +63,7 @@ export default async function Home() {
         <div className="flex items-center gap-3">
           {/* ▼▼ ロゴ画像の追加（publicフォルダに浜松市.pngがある前提） ▼▼ */}
           <div className="w-12 h-12 bg-white rounded-full p-1 flex-shrink-0">
-             <img src="/浜松市.png" alt="浜松市ロゴ" className="w-full h-full object-contain" />
+             <img src="/logo.png" alt="浜松市ロゴ" className="w-full h-full object-contain" />
           </div>
           
           <div>
