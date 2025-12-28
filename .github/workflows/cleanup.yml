@@ -2,9 +2,7 @@ name: Cleanup Old Images
 
 on:
   schedule:
-    # 毎日 日本時間 朝9:00 (UTC 0:00) に実行
     - cron: '0 0 * * *'
-  # 手動で実行ボタンを押せるようにする設定
   workflow_dispatch:
 
 jobs:
@@ -13,5 +11,5 @@ jobs:
     steps:
       - name: Call Cleanup API
         run: |
-          # --fail を外して、-v (詳細表示) を追加し、エラー内容をログに出す
-          curl -v "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
+          # Mozilla(Chrome)のふりをしてアクセスする設定
+          curl -v -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
