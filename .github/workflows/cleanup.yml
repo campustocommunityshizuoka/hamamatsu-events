@@ -2,9 +2,8 @@ name: Cleanup Old Images
 
 on:
   schedule:
-    # 毎日 日本時間 朝9:00 (UTC 0:00) に実行
-    - cron: '0 0 * * *'
-  # 緊急時に手動で実行ボタンを押せる設定は残しておきます（便利なので）
+    # 日本時間 16:10 (UTC 07:10) に実行
+    - cron: '10 7 * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,6 +12,4 @@ jobs:
     steps:
       - name: Call Cleanup API
         run: |
-          # --fail: エラー(400/500番台)が返ってきたらActionsを「失敗(赤色)」にする
-          # User-Agent: Cloudflareにブロックされないようブラウザのふりをする
           curl --fail -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
