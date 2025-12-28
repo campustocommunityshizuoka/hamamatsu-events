@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "浜松市イベント情報サイト",
   description: "浜松市で開催されるイベント情報を提供します。",
+  icons: {
+    icon: '/icon.png', // publicフォルダの画像を指定
+  },
 };
 
 export default function RootLayout({
