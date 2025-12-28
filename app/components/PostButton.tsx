@@ -22,10 +22,12 @@ export default function PostButton() {
   return (
     <button 
       onClick={handleClick}
-      className="bg-white text-orange-600 font-bold py-2 px-4 rounded-full shadow hover:bg-orange-50 transition duration-200 flex items-center gap-2 text-sm"
+      // ▼▼ オレンジから青(text-blue-700)・空色ホバー(hover:bg-sky-50)に変更 ▼▼
+      className="bg-white text-blue-700 font-bold py-2 px-5 rounded-full shadow hover:bg-sky-50 transition duration-200 flex items-center gap-2"
     >
       <span className="text-lg">✏️</span>
-      投稿する
+      {/* 文字サイズを少し大きく調整 */}
+      <span className="text-base">投稿する</span>
     </button>
   );
 }

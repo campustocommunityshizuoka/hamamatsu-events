@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { formatDate, getDaysUntil } from '@/lib/utils';
-import PostButton from '@/app/components/PostButton'; // 作成したボタンをインポート
+import PostButton from '@/app/components/PostButton';
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -39,9 +39,7 @@ async function getEvents(): Promise<Event[]> {
       id, title, event_date, location, area, image_url,
       profiles ( name, avatar_url ) 
     `)
-    // ▼▼ 修正点: 非表示フラグが false のものだけを取得する条件を追加 ▼▼
     .eq('is_hidden', false) 
-    // ▲▲ ここまで ▲▲
     .gte('event_date', today)
     .lte('event_date', twoWeeksLater)
     .order('event_date', { ascending: true });
@@ -57,25 +55,33 @@ export default async function Home() {
   const events = await getEvents();
 
   return (
-    <main className="min-h-screen bg-gray-100 pb-20 font-sans">
-      {/* ▼▼ ヘッダー修正：Flexレイアウトにしてボタンを配置 ▼▼ */}
-      <header className="bg-orange-500 text-white p-4 shadow sticky top-0 z-20 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">浜松イベント情報</h1>
-          <p className="text-xs mt-1 opacity-90">地域の催し物がすぐわかる</p>
+    <main className="min-h-screen bg-slate-50 pb-20 font-sans">
+      
+      {/* ▼▼ ヘッダー修正 ▼▼ */}
+      <header className="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-20 flex justify-between items-center">
+        {/* ロゴとテキストを横並びにするためのdiv */}
+        <div className="flex items-center gap-3">
+          {/* ▼▼ ロゴ画像の追加（publicフォルダに浜松市.pngがある前提） ▼▼ */}
+          <div className="w-12 h-12 bg-white rounded-full p-1 flex-shrink-0">
+             <img src="/浜松市.png" alt="浜松市ロゴ" className="w-full h-full object-contain" />
+          </div>
+          
+          <div>
+            <h1 className="text-2xl font-bold tracking-wide leading-none">浜松イベント情報</h1>
+            <p className="text-xs mt-1 text-sky-100">地域の催し物がすぐわかる</p>
+          </div>
         </div>
         
-        {/* ここに作成したボタンを配置 */}
         <div>
           <PostButton />
         </div>
       </header>
       {/* ▲▲ ここまで ▲▲ */}
 
-      <div className="max-w-md mx-auto md:max-w-4xl p-2">
+      <div className="max-w-md mx-auto md:max-w-4xl p-4">
         {events.length === 0 && (
-          <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm">
-            <p className="text-xl text-gray-600 mb-2">現在、予定されている<br/>イベントはありません。</p>
+          <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm border border-slate-200">
+            <p className="text-xl text-slate-600 mb-2">現在、予定されている<br/>イベントはありません。</p>
           </div>
         )}
 
@@ -87,10 +93,10 @@ export default async function Home() {
             
             return (
               <Link key={event.id} href={`/events/${event.id}`} className="block group">
-                <div className="bg-white rounded-2xl shadow-md overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-gray-200">
+                <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-slate-200">
                   
                   {/* 画像エリア */}
-                  <div className="relative aspect-[4/3] bg-gray-200">
+                  <div className="relative aspect-[4/3] bg-slate-100">
                     {event.image_url ? (
                       <img 
                         src={event.image_url} 
@@ -98,21 +104,21 @@ export default async function Home() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-500 text-lg font-bold">
-                        画像なし
+                      <div className="w-full h-full flex items-center justify-center bg-slate-200 text-slate-400 text-lg font-bold">
+                        No Image
                       </div>
                     )}
                     
-                    {/* 開催までの日数（右上） */}
+                    {/* 開催までの日数 */}
                     {statusLabel && (
-                      <span className="absolute top-2 right-2 bg-red-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow border-2 border-white">
+                      <span className="absolute top-2 right-2 bg-rose-600 text-white text-base font-bold px-3 py-1 rounded-full shadow border-2 border-white">
                         {statusLabel}
                       </span>
                     )}
 
-                    {/* ▼▼ 地区表示：右下(right-2)から左下(left-2)へ変更 ▼▼ */}
+                    {/* ▼▼ 地区表示：文字サイズを大きく(text-xs -> text-sm)、余白も拡大 ▼▼ */}
                     {event.area && (
-                      <span className="absolute bottom-2 left-2 bg-amber-400 text-amber-900 text-xs font-bold px-2 py-1 rounded shadow-sm border border-amber-200">
+                      <span className="absolute bottom-2 left-2 bg-sky-100 text-sky-900 text-sm font-bold px-3 py-1.5 rounded shadow-sm border border-sky-200">
                         📍 {event.area}
                       </span>
                     )}
@@ -120,29 +126,35 @@ export default async function Home() {
 
                   </div>
 
-                  <div className="p-4">
-                    <p className="text-orange-600 font-bold text-lg mb-1">
+                  <div className="p-5"> {/* パディングを少し拡大 p-4 -> p-5 */}
+                    {/* ▼▼ 日付：文字サイズ拡大 text-lg -> text-xl ▼▼ */}
+                    <p className="text-blue-700 font-bold text-xl mb-2">
                       📅 {formatDate(event.event_date)}
                     </p>
                     
+                    {/* タイトル */}
                     <h2 className="text-2xl font-bold text-gray-800 leading-tight mb-3 line-clamp-2">
                       {event.title}
                     </h2>
                     
-                    <div className="text-gray-500 text-sm space-y-2">
-                      <p className="line-clamp-1">📍 {event.location || '場所の記載なし'}</p>
+                    {/* ▼▼ 詳細情報：文字サイズ全体を拡大 text-sm -> text-base ▼▼ */}
+                    <div className="text-gray-600 text-base space-y-3">
+                      <p className="line-clamp-1 flex items-center gap-1">
+                        <span>📍</span>
+                        {event.location || '場所の記載なし'}
+                      </p>
                       
-                      <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg mt-2">
-                        <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 border border-gray-200">
+                      <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg mt-2 border border-slate-100">
+                        <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex-shrink-0 border border-slate-200"> {/* アイコンも少し拡大 */}
                           {posterIcon ? (
                             <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
                           ) : (
-                            <svg className="w-full h-full text-gray-500 p-1" fill="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-full h-full text-slate-400 p-1" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                             </svg>
                           )}
                         </div>
-                        <span className="font-bold text-gray-700 truncate">{posterName}</span>
+                        <span className="font-bold text-slate-700 truncate text-base">{posterName}</span>
                       </div>
                     </div>
                   </div>
