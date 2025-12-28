@@ -13,6 +13,5 @@ jobs:
     steps:
       - name: Call Cleanup API
         run: |
-          # サイトのURLとキーを使ってAPIを叩く
-          # --fail オプションで、ステータスコードが400以上の場合はエラーにする
-          curl --fail -X GET "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
+          # --fail を外して、-v (詳細表示) を追加し、エラー内容をログに出す
+          curl -v "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
