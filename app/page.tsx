@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
 // 1ページあたりの表示件数
-const PER_PAGE = 20;
+const PER_PAGE = 10;
 
 type Event = {
   id: number;
