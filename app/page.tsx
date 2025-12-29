@@ -7,6 +7,9 @@ export const revalidate = 0;
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
+// 1ページあたりの表示件数
+const PER_PAGE = 20;
+
 type Event = {
   id: number;
   title: string;
@@ -20,12 +23,19 @@ type Event = {
   } | null;
 };
 
-async function getEvents(): Promise<Event[]> {
+// 戻り値の型を変更（件数情報を含めるため）
+type EventsResult = {
+  events: Event[];
+  total: number | null;
+};
+
+// ページ番号(page)を受け取るように修正
+async function getEvents(page: number): Promise<EventsResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    return [];
+    return { events: [], total: 0 };
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -33,35 +43,53 @@ async function getEvents(): Promise<Event[]> {
   const today = new Date().toISOString().split('T')[0];
   const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  const { data, error } = await supabase
+  // ページネーションの計算（何件目から何件目までを取得するか）
+  const from = (page - 1) * PER_PAGE;
+  const to = from + PER_PAGE - 1;
+
+  const { data, error, count } = await supabase
     .from('events')
     .select(`
       id, title, event_date, location, area, image_url,
       profiles ( name, avatar_url ) 
-    `)
+    `, { count: 'exact' }) // count: 'exact' で全件数を取得
     .eq('is_hidden', false) 
     .gte('event_date', today)
     .lte('event_date', twoWeeksLater)
-    .order('event_date', { ascending: true });
+    .order('event_date', { ascending: true })
+    .range(from, to); // 範囲指定を追加
 
   if (error) {
     console.error('Supabase Error:', error);
-    return [];
+    return { events: [], total: 0 };
   }
-  return data as unknown as Event[];
+  
+  return { events: data as unknown as Event[], total: count };
 }
 
-export default async function Home() {
-  const events = await getEvents();
+// Next.js 15では searchParams は Promise になります
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  // URLパラメータからページ番号を取得（デフォルトは1ページ目）
+  const resolvedSearchParams = await searchParams;
+  const page = typeof resolvedSearchParams.page === 'string' ? parseInt(resolvedSearchParams.page) : 1;
+  
+  // イベントデータと総件数を取得
+  const { events, total } = await getEvents(page);
+  
+  // 総ページ数を計算
+  const totalEvents = total || 0;
+  const totalPages = Math.ceil(totalEvents / PER_PAGE);
 
   return (
     <main className="min-h-screen bg-slate-50 pb-20 font-sans">
       
-      {/* ▼▼ ヘッダー修正 ▼▼ */}
+      {/* ▼▼ ヘッダー ▼▼ */}
       <header className="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-20 flex justify-between items-center">
-        {/* ロゴとテキストを横並びにするためのdiv */}
         <div className="flex items-center gap-3">
-          {/* ▼▼ ロゴ画像の追加（publicフォルダに浜松市.pngがある前提） ▼▼ */}
           <div className="w-12 h-12 bg-white rounded-full p-1 flex-shrink-0">
              <img src="/logo.png" alt="浜松市ロゴ" className="w-full h-full object-contain" />
           </div>
@@ -81,16 +109,25 @@ export default async function Home() {
       <div className="max-w-md mx-auto md:max-w-4xl p-4">
         {events.length === 0 && (
           <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm border border-slate-200">
-            <p className="text-xl text-slate-600 mb-2">現在、予定されている<br/>イベントはありません。</p>
+            <p className="text-xl text-slate-600 mb-2">
+              {page === 1 ? '現在、予定されているイベントはありません。' : 'このページにイベントはありません。'}
+            </p>
+            {page > 1 && (
+               <Link href="/" className="text-blue-600 hover:underline mt-4 block">先頭に戻る</Link>
+            )}
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
-          {events.map((event) => {
+          {events.map((event, index) => {
             const statusLabel = getDaysUntil(event.event_date);
             const posterName = event.profiles?.name || '主催者不明';
             const posterIcon = event.profiles?.avatar_url;
             
+            // 最初の3件以外は遅延読み込み(lazy)にする
+            // これにより初期ロード時の通信量を大幅に削減
+            const loadingType = index < 3 ? "eager" : "lazy";
+
             return (
               <Link key={event.id} href={`/events/${event.id}`} className="block group">
                 <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-slate-200">
@@ -101,6 +138,7 @@ export default async function Home() {
                       <img 
                         src={event.image_url} 
                         alt={event.title} 
+                        loading={loadingType} // ▼▼ Lazy Loading実装箇所 ▼▼
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -116,28 +154,24 @@ export default async function Home() {
                       </span>
                     )}
 
-                    {/* ▼▼ 地区表示：文字サイズを大きく(text-xs -> text-sm)、余白も拡大 ▼▼ */}
+                    {/* 地区表示 */}
                     {event.area && (
                       <span className="absolute bottom-2 left-2 bg-sky-100 text-sky-900 text-sm font-bold px-3 py-1.5 rounded shadow-sm border border-sky-200">
                         📍 {event.area}
                       </span>
                     )}
-                    {/* ▲▲ ここまで ▲▲ */}
 
                   </div>
 
-                  <div className="p-5"> {/* パディングを少し拡大 p-4 -> p-5 */}
-                    {/* ▼▼ 日付：文字サイズ拡大 text-lg -> text-xl ▼▼ */}
+                  <div className="p-5">
                     <p className="text-blue-700 font-bold text-xl mb-2">
                       📅 {formatDate(event.event_date)}
                     </p>
                     
-                    {/* タイトル */}
                     <h2 className="text-2xl font-bold text-gray-800 leading-tight mb-3 line-clamp-2">
                       {event.title}
                     </h2>
                     
-                    {/* ▼▼ 詳細情報：文字サイズ全体を拡大 text-sm -> text-base ▼▼ */}
                     <div className="text-gray-600 text-base space-y-3">
                       <p className="line-clamp-1 flex items-center gap-1">
                         <span>📍</span>
@@ -145,9 +179,9 @@ export default async function Home() {
                       </p>
                       
                       <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg mt-2 border border-slate-100">
-                        <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex-shrink-0 border border-slate-200"> {/* アイコンも少し拡大 */}
+                        <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex-shrink-0 border border-slate-200">
                           {posterIcon ? (
-                            <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
+                            <img src={posterIcon} alt={posterName} loading="lazy" className="w-full h-full object-cover" />
                           ) : (
                             <svg className="w-full h-full text-slate-400 p-1" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
@@ -163,6 +197,45 @@ export default async function Home() {
             );
           })}
         </div>
+
+        {/* ▼▼ ページネーションボタン ▼▼ */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 mt-12 mb-8">
+            {/* 前のページへ */}
+            {page > 1 ? (
+              <Link 
+                href={`/?page=${page - 1}`}
+                className="px-6 py-3 bg-white text-blue-700 border-2 border-blue-700 rounded-full font-bold shadow-sm hover:bg-blue-50 transition"
+              >
+                ← 前のページ
+              </Link>
+            ) : (
+              <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border-2 border-gray-200 rounded-full font-bold cursor-not-allowed">
+                ← 前のページ
+              </button>
+            )}
+
+            <span className="text-gray-600 font-bold">
+              {page} / {totalPages}
+            </span>
+
+            {/* 次のページへ */}
+            {page < totalPages ? (
+              <Link 
+                href={`/?page=${page + 1}`}
+                className="px-6 py-3 bg-blue-700 text-white rounded-full font-bold shadow-md hover:bg-blue-800 transition"
+              >
+                次のページ →
+              </Link>
+            ) : (
+              <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border-2 border-gray-200 rounded-full font-bold cursor-not-allowed">
+                次のページ →
+              </button>
+            )}
+          </div>
+        )}
+        {/* ▲▲ ここまで ▲▲ */}
+        
       </div>
     </main>
   );
