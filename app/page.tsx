@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { formatDate, getDaysUntil } from '@/lib/utils';
-import PostButton from '@/app/components/PostButton';
+// import PostButton from '@/app/components/PostButton'; // ★削除またはコメントアウト
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -100,9 +100,11 @@ export default async function Home({
           </div>
         </div>
         
+        {/* ★投稿ボタン削除
         <div>
           <PostButton />
         </div>
+        */}
       </header>
       {/* ▲▲ ここまで ▲▲ */}
 

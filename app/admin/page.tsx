@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
+import { QRCodeSVG } from 'qrcode.react';
 
 // イベント情報の型定義
 type Event = {
@@ -14,7 +15,7 @@ type Event = {
   poster_id?: string;
   view_count?: number;
   is_hidden: boolean;
-  image_url: string | null; // ★追加: 削除時に必要なため
+  image_url: string | null;
   profiles: {
     name: string | null;
   } | null;
@@ -47,9 +48,13 @@ export default function AdminDashboard() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
   
+  // 招待URLの状態管理
+  const [inviteUrl, setInviteUrl] = useState('');
+  // ★追加: QRコードの表示切り替えフラグ
+  const [showQrCode, setShowQrCode] = useState(false);
+
   // メッセージパネルの開閉状態
   const [showMessages, setShowMessages] = useState(false);
-  // パネル外クリック検知用のRef
   const messagePanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -89,7 +94,7 @@ export default function AdminDashboard() {
           is_hidden, 
           image_url, 
           profiles ( name )
-        `) // ★追加: image_url を取得
+        `)
         .order('event_date', { ascending: false });
 
       if (!hasAdminPrivileges) {
@@ -120,7 +125,15 @@ export default function AdminDashboard() {
     fetchData();
   }, [router]);
 
-  // パネル外をクリックしたら閉じる処理
+  // 招待URL生成
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // ★重要: ここの 'hamamatsu2025secret' は本番環境の環境変数 ADMIN_INVITE_CODE と同じ値にしてください
+      setInviteUrl(`${window.location.origin}/api/invite?code=hamamatsu2025secret`);
+    }
+  }, []);
+
+  // パネル外クリック検知
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (messagePanelRef.current && !messagePanelRef.current.contains(event.target as Node)) {
@@ -131,7 +144,7 @@ export default function AdminDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // メッセージを既読にする処理
+  // 既読処理
   const markAsRead = async (messageId: string) => {
     try {
       const { error } = await supabase
@@ -149,7 +162,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // メッセージを削除する処理
+  // 削除処理
   const deleteMessage = async (messageId: string) => {
     if (!confirm('このメッセージを削除してもよろしいですか？')) return;
 
@@ -169,7 +182,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // ★追加: 画像パス解析用のヘルパー関数
+  // 画像パス解析
   const getFilePathFromUrl = (url: string) => {
     try {
       const parts = url.split('/event-images/');
@@ -197,8 +210,6 @@ export default function AdminDashboard() {
     }
 
     try {
-      // ★追加: 削除前に画像のURLを取得してStorageから削除
-      // (eventsステートから該当イベントを探す)
       const targetEvent = events.find(e => e.id === id);
       
       if (targetEvent?.image_url) {
@@ -216,7 +227,6 @@ export default function AdminDashboard() {
         }
       }
 
-      // DBから削除
       const { error, data } = await supabase
         .from('events')
         .delete()
@@ -256,7 +266,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 非表示切り替え処理
   const handleToggleHidden = async (id: number, currentHiddenStatus: boolean, poster_id?: string, eventTitle?: string) => {
     if (myProfile?.role !== 'super_admin') {
       alert('この操作は特権管理者のみ可能です。');
@@ -369,7 +378,7 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* メールアイコンとメッセージパネル */}
+            {/* メールアイコン */}
             <div className="relative" ref={messagePanelRef}>
               <button 
                 onClick={() => setShowMessages(!showMessages)}
@@ -462,6 +471,40 @@ export default function AdminDashboard() {
             </button>
           </div>
         </div>
+
+        {/* ▼▼▼ 管理者用 招待QRコードエリア（トグル式） ▼▼▼ */}
+        {hasAdminPrivileges && (
+          <div className="mb-8">
+             {/* 切り替えボタン */}
+             <button
+               onClick={() => setShowQrCode(!showQrCode)}
+               className="flex items-center gap-2 text-teal-700 font-bold border border-teal-300 bg-teal-50 px-4 py-2 rounded-lg hover:bg-teal-100 transition shadow-sm"
+             >
+               <span className="text-xl">🎟️</span>
+               {showQrCode ? '招待QRコードを隠す' : '新規メンバー招待QRコードを表示'}
+             </button>
+
+             {/* QRコード表示エリア（ボタンを押した時だけ表示） */}
+             {showQrCode && (
+               <div className="mt-4 bg-white p-6 rounded-xl shadow-md border border-teal-200 flex flex-col md:flex-row items-center gap-6 animate-fadeIn">
+                 <div className="bg-white p-2 border border-gray-200 rounded-lg">
+                   {inviteUrl && <QRCodeSVG value={inviteUrl} size={150} />}
+                 </div>
+                 <div className="flex-1">
+                   <h3 className="font-bold text-lg text-teal-800 mb-2">新規メンバー招待用QRコード</h3>
+                   <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                     新しい投稿者を招待する場合、このQRコードを読み取ってもらってください。<br/>
+                     読み取ると<strong>1日間 (24時間)</strong> だけ、ログイン・登録画面へのアクセスが許可されます。
+                   </p>
+                   <div className="bg-gray-100 p-3 rounded-lg text-xs text-gray-500 break-all font-mono border border-gray-200">
+                     {inviteUrl}
+                   </div>
+                 </div>
+               </div>
+             )}
+          </div>
+        )}
+        {/* ▲▲▲ ここまで ▲▲▲ */}
 
         <div className="mb-6">
           <Link href="/admin/create" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-700 inline-block">
