@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 保護したいページ
-  const protectedPaths = ['/login', '/register', '/forgot-password', '/update-password'];
+  const protectedPaths = ['/register', '/forgot-password', '/update-password'];
 
   // 今のアクセス先が保護対象かどうかチェック
   if (protectedPaths.some((path) => pathname.startsWith(path))) {
@@ -25,7 +25,6 @@ export function middleware(request: NextRequest) {
 // Middlewareを適用するパスの設定
 export const config = {
   matcher: [
-    '/login',
     '/register',
     '/forgot-password',
     '/update-password',

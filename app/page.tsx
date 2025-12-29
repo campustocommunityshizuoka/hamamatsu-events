@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { formatDate, getDaysUntil } from '@/lib/utils';
-// import PostButton from '@/app/components/PostButton'; // ★削除またはコメントアウト
+// import PostButton from '@/app/components/PostButton'; // 削除
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -100,11 +100,16 @@ export default async function Home({
           </div>
         </div>
         
-        {/* ★投稿ボタン削除
+        {/* ▼▼ 追加: ログインボタン ▼▼ */}
         <div>
-          <PostButton />
+          <Link 
+            href="/login" 
+            className="text-xs sm:text-sm font-medium bg-blue-800 hover:bg-blue-600 text-white px-3 py-2 rounded transition-colors border border-blue-600"
+          >
+            関係者ログイン
+          </Link>
         </div>
-        */}
+        {/* ▲▲ ここまで ▲▲ */}
       </header>
       {/* ▲▲ ここまで ▲▲ */}
 
@@ -127,7 +132,6 @@ export default async function Home({
             const posterIcon = event.profiles?.avatar_url;
             
             // 最初の3件以外は遅延読み込み(lazy)にする
-            // これにより初期ロード時の通信量を大幅に削減
             const loadingType = index < 3 ? "eager" : "lazy";
 
             return (
@@ -140,7 +144,7 @@ export default async function Home({
                       <img 
                         src={event.image_url} 
                         alt={event.title} 
-                        loading={loadingType} // ▼▼ Lazy Loading実装箇所 ▼▼
+                        loading={loadingType}
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -236,7 +240,6 @@ export default async function Home({
             )}
           </div>
         )}
-        {/* ▲▲ ここまで ▲▲ */}
         
       </div>
     </main>

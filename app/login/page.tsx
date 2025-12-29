@@ -91,10 +91,7 @@ export default function LoginPage() {
            <Link href="/forgot-password" className="text-blue-600 hover:underline">
              パスワードを忘れた場合
            </Link>
-           <p className="text-gray-600 mt-2">まだアカウントをお持ちでない方</p>
-           <Link href="/register" className="text-green-600 font-bold hover:underline">
-             新規会員登録はこちら
-           </Link>
+           {/* 新規登録リンク削除済み */}
         </div>
       </div>
     </div>
