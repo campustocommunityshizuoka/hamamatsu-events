@@ -9,7 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // 表示切り替え用
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -32,9 +32,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">管理者ログイン</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center">関係者ログイン</h1>
         
         {errorMsg && (
           <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">
@@ -56,13 +56,12 @@ export default function LoginPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700">パスワード</label>
             <input
-              type={showPassword ? 'text' : 'password'} // ここで切り替え
+              type={showPassword ? 'text' : 'password'}
               required
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {/* ▼▼ パスワード表示チェックボックス ▼▼ */}
             <div className="mt-2 flex items-center">
               <input
                 id="show-password"
@@ -75,7 +74,6 @@ export default function LoginPage() {
                 パスワードを表示する
               </label>
             </div>
-            {/* ▲▲ ここまで ▲▲ */}
           </div>
           
           <button
@@ -87,11 +85,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-4 flex flex-col gap-2 text-center text-sm border-t pt-4">
+        <div className="mt-6 flex flex-col gap-3 text-center text-sm border-t pt-4">
            <Link href="/forgot-password" className="text-blue-600 hover:underline">
              パスワードを忘れた場合
            </Link>
-           {/* 新規登録リンク削除済み */}
+           
+           <div className="bg-green-50 p-3 rounded-lg border border-green-200 mt-2">
+             <p className="text-gray-600 mb-1 font-bold">まだアカウントをお持ちでない方</p>
+             <Link href="/apply" className="text-green-700 font-bold hover:underline text-base block">
+               👉 新規利用申請はこちら
+             </Link>
+           </div>
         </div>
       </div>
     </div>
