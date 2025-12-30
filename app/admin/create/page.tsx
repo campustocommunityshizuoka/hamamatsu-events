@@ -50,6 +50,16 @@ function CreateEventForm() {
   const [description, setDescription] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
 
+  // ★追加: 日付制限用の値を計算
+  // 今日の日付 (YYYY-MM-DD形式)
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+
+  // 1ヶ月後の日付 (YYYY-MM-DD形式)
+  const maxDateObj = new Date();
+  maxDateObj.setMonth(maxDateObj.getMonth() + 1);
+  const maxDateStr = maxDateObj.toISOString().split('T')[0];
+
   // ★追加: ユーザー権限と本日の投稿数を確認する
   useEffect(() => {
     const checkLimit = async () => {
@@ -110,6 +120,7 @@ function CreateEventForm() {
         setLocation(data.location || '');
         setPhone(data.contact_phone || '');
         setDescription(data.description || '');
+        // 日付はコピーせず、ユーザーに設定させるためセットしない
       }
     };
 
@@ -157,9 +168,20 @@ function CreateEventForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // バリデーション
+    // バリデーション: 必須項目
     if (!title || !date || !area) {
       alert('イベント名、地域、開催日は必須です');
+      return;
+    }
+
+    // ★追加: 日付の範囲バリデーション
+    // 入力された日付と制限日を比較
+    if (date < todayStr) {
+      alert('過去の日付は設定できません');
+      return;
+    }
+    if (date > maxDateStr) {
+      alert('開催日は本日より1ヶ月以内で設定してください');
       return;
     }
 
@@ -283,17 +305,20 @@ function CreateEventForm() {
           {/* 日付 */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">
-              開催日
+              開催日 (1ヶ月先まで)
               <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
             </label>
             <input
               type="date"
               required
+              min={todayStr}    // ★追加: 過去の日付を選択不可に
+              max={maxDateStr}  // ★追加: 1ヶ月後までを選択可能に
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500"
               disabled={isLimitReached}
             />
+            <p className="text-xs text-gray-500 mt-1">※本日から1ヶ月以内の日付を選択してください</p>
           </div>
 
           {/* くわしい内容 */}
