@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-// ★重要: ここで createClient していたのを削除し、関数の中に移動します
+// データの型定義（any回避のため）
+interface EventRow {
+  id: number;
+  image_url: string | null;
+}
 
-// この行を追加（ビルド時に静的生成されるのを防ぐ）
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
@@ -13,7 +16,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const key = searchParams.get('key');
     
-    // 環境変数がない場合のガードを入れる
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -26,20 +28,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // ★修正: ここでクライアントを作成する（使う直前に作る）
+    // クライアントを作成
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // 2. 昨日以前の日付を取得
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    // 2. 「今日より前」の日付を取得
+    // 現在時刻(UTCまたはサーバーのタイムゾーン)から日付部分のみ抽出 (例: "2025-12-30")
+    const todayStr = new Date().toISOString().split('T')[0];
 
-    // 3. 画像を持っていて、かつ開催日が過ぎたイベントを取得
+    // 3. 画像を持っていて、かつ開催日が「今日より前（今日を含まない）」のイベントを取得
+    // .lt('event_date', todayStr) は event_date < "2025-12-30" を意味します
     const { data: expiredEvents, error: fetchError } = await supabaseAdmin
       .from('events')
       .select('id, image_url')
-      .lt('event_date', yesterdayStr)
-      .not('image_url', 'is', null);
+      .lt('event_date', todayStr)
+      .not('image_url', 'is', null)
+      .returns<EventRow[]>(); // 型を指定
 
     if (fetchError) throw fetchError;
 
@@ -55,7 +58,7 @@ export async function GET(request: Request) {
       if (event.image_url) {
         const parts = event.image_url.split('/event-images/');
         if (parts.length > 1) {
-          // デコード処理を入れておく
+          // デコード処理
           filesToDelete.push(decodeURIComponent(parts[1]));
           eventIdsToUpdate.push(event.id);
         }
@@ -63,6 +66,7 @@ export async function GET(request: Request) {
     });
 
     if (filesToDelete.length > 0) {
+      // Storageから削除
       const { error: storageError } = await supabaseAdmin
         .storage
         .from('event-images')
@@ -70,6 +74,7 @@ export async function GET(request: Request) {
 
       if (storageError) throw storageError;
 
+      // DBのimage_urlをnullに更新
       const { error: dbError } = await supabaseAdmin
         .from('events')
         .update({ image_url: null })
@@ -84,8 +89,15 @@ export async function GET(request: Request) {
       deleted_files: filesToDelete 
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    // anyを使わず unknown として受け取り、型ガードで処理
     console.error('Cleanup error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    
+    let errorMessage = 'An unexpected error occurred';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
