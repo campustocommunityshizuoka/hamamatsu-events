@@ -9,7 +9,7 @@ import { QRCodeSVG } from 'qrcode.react';
 
 // --- WorkerのURL定義 ---
 const WORKER_URL = 'https://mail-sender.campustocommunityshizuoka.workers.dev/';
-//const WORKER_URL = 'https://dummy-url-for-testing'; // ← 存在しないURLにする
+
 // --- 型定義 ---
 
 type Event = {
@@ -20,6 +20,7 @@ type Event = {
   view_count?: number;
   is_hidden: boolean;
   image_url: string | null;
+  category: string | null;
   profiles: {
     name: string | null;
   } | null;
@@ -51,6 +52,16 @@ type Application = {
   created_at: string;
 };
 
+type Report = {
+  id: number;
+  reason: string;
+  created_at: string;
+  events: {
+    id: number;
+    title: string;
+  } | null;
+};
+
 // --- コンポーネント本体 ---
 
 export default function AdminDashboard() {
@@ -60,6 +71,7 @@ export default function AdminDashboard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
@@ -67,11 +79,17 @@ export default function AdminDashboard() {
   // UI制御用State
   const [inviteUrl, setInviteUrl] = useState('');
   const [showQrCode, setShowQrCode] = useState(false);
+  
+  // パネル表示フラグ
+  const [showMailMenu, setShowMailMenu] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showApplications, setShowApplications] = useState(false);
+  const [showReports, setShowReports] = useState(false);
   
+  const mailMenuRef = useRef<HTMLDivElement>(null);
   const messagePanelRef = useRef<HTMLDivElement>(null);
   const applicationPanelRef = useRef<HTMLDivElement>(null);
+  const reportPanelRef = useRef<HTMLDivElement>(null);
 
   // データ取得
   useEffect(() => {
@@ -103,7 +121,7 @@ export default function AdminDashboard() {
       let query = supabase
         .from('events')
         .select(`
-          id, title, event_date, poster_id, view_count, is_hidden, image_url, 
+          id, title, event_date, poster_id, view_count, is_hidden, image_url, category,
           profiles ( name )
         `)
         .order('event_date', { ascending: false });
@@ -130,7 +148,7 @@ export default function AdminDashboard() {
       if (messagesError) console.error("メッセージ取得エラー:", messagesError);
       if (messagesData) setMessages(messagesData as unknown as Message[]);
 
-      // 5. 申請データ取得 (管理者の場合のみ)
+      // 5. 管理者用データ取得
       if (hasAdminPrivileges) {
         const { data: appsData } = await supabase
           .from('applications')
@@ -139,6 +157,16 @@ export default function AdminDashboard() {
           .order('created_at', { ascending: false });
         
         if (appsData) setApplications(appsData as Application[]);
+
+        const { data: reportsData } = await supabase
+          .from('reports')
+          .select(`
+            id, reason, created_at,
+            events ( id, title )
+          `)
+          .order('created_at', { ascending: false });
+
+        if (reportsData) setReports(reportsData as unknown as Report[]);
       }
 
       setLoading(false);
@@ -147,21 +175,24 @@ export default function AdminDashboard() {
     fetchData();
   }, [router]);
 
-  // 招待URL設定 (固定URL)
   useEffect(() => {
     setInviteUrl('https://hamamtsu-events.shizuoka-connect.com/api/invite?code=hamamatsu2025secret');
   }, []);
 
-  // パネル外クリック検知
+  // クリック外検知
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // メッセージパネル
-      if (messagePanelRef.current && !messagePanelRef.current.contains(event.target as Node)) {
-        setShowMessages(false);
+      if (mailMenuRef.current && !mailMenuRef.current.contains(event.target as Node)) {
+        setShowMailMenu(false);
       }
-      // 申請パネル
+      if (messagePanelRef.current && !messagePanelRef.current.contains(event.target as Node)) {
+        // setShowMessages(false); // バッティング防止のためコメントアウト
+      }
       if (applicationPanelRef.current && !applicationPanelRef.current.contains(event.target as Node)) {
         setShowApplications(false);
+      }
+      if (reportPanelRef.current && !reportPanelRef.current.contains(event.target as Node)) {
+        setShowReports(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -199,6 +230,23 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error("削除エラー:", err);
       alert('メッセージの削除に失敗しました。');
+    }
+  };
+
+  const deleteReport = async (reportId: number) => {
+    if (!confirm('この通報を「対応済み」としてリストから削除しますか？')) return;
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .delete()
+        .eq('id', reportId);
+      
+      if (error) throw error;
+      
+      setReports(prev => prev.filter(r => r.id !== reportId));
+    } catch (err) {
+      console.error("通報削除エラー:", err);
+      alert('削除に失敗しました');
     }
   };
 
@@ -334,9 +382,7 @@ export default function AdminDashboard() {
     return grouped;
   };
 
-  // --- 自動送信用のヘルパー関数 ---
   const sendEmailViaWorker = async (toEmail: string, toName: string, subject: string, bodyText: string) => {
-    // 改行コードをHTMLの<br>に変換
     const htmlContent = `
       <p>${toName} 様</p>
       <p>${bodyText.replace(/\n/g, '<br/>')}</p>
@@ -359,11 +405,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // 申請承認処理 (自動送信 -> 失敗時メーラー起動 -> DB削除)
   const handleApprove = async (app: Application) => {
     if (!confirm(`「${app.organization_name}」を承認しますか？`)) return;
 
-    // メール本文の準備
     const subject = "【浜松イベント情報】利用申請の承認と招待について";
     const body = 
       `浜松イベント情報への利用申請ありがとうございます。\n` +
@@ -375,19 +419,16 @@ export default function AdminDashboard() {
 
     let autoSendSuccess = false;
 
-    // 1. 自動送信トライ
     try {
       await sendEmailViaWorker(app.email, app.organization_name, subject, body);
       autoSendSuccess = true;
     } catch (e) {
       console.error("自動送信失敗:", e);
-      // 自動送信失敗時: メーラーを起動するフォールバック処理
       alert("自動送信に失敗しました。メールソフトを起動しますので、手動で送信してください。");
       const mailtoLink = `mailto:${app.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       window.location.href = mailtoLink;
     }
 
-    // 2. DBから削除 (自動送信成功、または手動送信に切り替えた場合も、処理済みとして削除)
     try {
       const { error } = await supabase
         .from('applications')
@@ -396,27 +437,21 @@ export default function AdminDashboard() {
 
       if (error) throw error;
 
-      // 画面のリストから消す
       setApplications(prev => prev.filter(a => a.id !== app.id));
       
       if (autoSendSuccess) {
         alert('承認メールを自動送信し、処理を完了しました。');
       } 
-      // 手動送信の場合はメーラーが起動しているのでアラートは不要（あるいは「リストから削除しました」等を出してもOK）
-
     } catch (err) {
       console.error(err);
       alert('データベースからの削除に失敗しました（メール処理は実行されましたが、データが残っています）');
     }
   };
 
-  // 申請却下処理 (自動送信 -> 失敗時メーラー起動 -> DB削除)
   const handleReject = async (id: number, email: string, name: string) => {
-    // 理由入力プロンプト
     const reason = window.prompt("却下の理由を入力してください（相手へのメールに記載されます）:\n※空欄でキャンセル", "活動内容が本サイトの趣旨と異なるため");
-    if (reason === null) return; // キャンセル
+    if (reason === null) return;
 
-    // メール本文の準備
     const subject = "【浜松イベント情報】利用申請の結果について";
     const body = 
       `浜松イベント情報への利用申請ありがとうございます。\n` +
@@ -426,19 +461,16 @@ export default function AdminDashboard() {
 
     let autoSendSuccess = false;
 
-    // 1. 自動送信トライ
     try {
       await sendEmailViaWorker(email, name, subject, body);
       autoSendSuccess = true;
     } catch (e) {
       console.error("自動送信失敗:", e);
-      // 自動送信失敗時: メーラーを起動するフォールバック処理
       alert("自動送信に失敗しました。メールソフトを起動しますので、手動で送信してください。");
       const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       window.location.href = mailtoLink;
     }
 
-    // 2. DBから削除
     try {
       const { error } = await supabase
         .from('applications')
@@ -447,7 +479,6 @@ export default function AdminDashboard() {
       
       if (error) throw error;
       
-      // 画面のリストから消す
       setApplications(prev => prev.filter(a => a.id !== id));
       
       if (autoSendSuccess) {
@@ -460,36 +491,51 @@ export default function AdminDashboard() {
     }
   };
 
+  const splitEventsByDate = (list: Event[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    const upcoming = list.filter(e => e.event_date >= today);
+    const past = list.filter(e => e.event_date < today);
+    return { upcoming, past };
+  };
+
   if (loading) return <div className="p-10 text-center">読み込み中...</div>;
 
   const hasAdminPrivileges = ['admin', 'super_admin'].includes(myProfile?.role || '');
   const isSuperAdmin = myProfile?.role === 'super_admin';
   const unreadCount = messages.filter(m => !m.is_read).length;
   const pendingAppsCount = applications.length;
+  const reportsCount = reports.length;
 
   const myEvents = hasAdminPrivileges ? events.filter(e => e.poster_id === currentUserId) : [];
   const otherEvents = hasAdminPrivileges ? events.filter(e => e.poster_id !== currentUserId) : [];
   const groupedOtherEvents = groupEventsByPoster(otherEvents);
+  
+  const { upcoming: myUpcoming, past: myPast } = splitEventsByDate(hasAdminPrivileges ? myEvents : events);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         
         {/* ヘッダーエリア */}
-        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-6 rounded-xl shadow-sm relative z-20">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-4 md:p-6 rounded-xl shadow-sm relative z-20">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
               {myProfile?.avatar_url ? (
                 <img src={myProfile.avatar_url} alt="My Icon" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Img</div>
+                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-xs md:text-base">No Img</div>
               )}
             </div>
             
-            <div>
-              <h1 className="text-2xl font-bold">マイページ</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-gray-600 font-medium">
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl md:text-2xl font-bold">マイページ</h1>
+                <Link href="/" className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 flex items-center gap-1 border border-blue-200">
+                  <span>🏠</span> ホーム
+                </Link>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <p className="text-gray-600 font-medium text-sm md:text-base">
                   {myProfile?.name || '名無し'} さん
                 </p>
                 {hasAdminPrivileges && (
@@ -501,76 +547,153 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto justify-end">
             
-            {/* ▼▼▼ ★修正: 申請ボックスボタン (文字表示に変更) ▼▼▼ */}
             {hasAdminPrivileges && (
-              <div className="relative" ref={applicationPanelRef}>
-                <button
-                  onClick={() => setShowApplications(!showApplications)}
-                  className="relative px-3 py-2 text-orange-700 font-bold hover:bg-orange-50 rounded-lg transition-colors flex items-center gap-2 border border-orange-200"
-                  title="申請ボックス"
-                >
-                  <span>新規申請</span>
-                  {pendingAppsCount > 0 && (
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">
-                      {pendingAppsCount}
-                    </span>
-                  )}
-                </button>
+              <>
+                {/* 通報ボタン */}
+                <div className="relative" ref={reportPanelRef}>
+                  <button
+                    onClick={() => setShowReports(!showReports)}
+                    className="relative px-3 py-2 text-red-700 font-bold hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 border border-red-200 text-sm"
+                    title="通報一覧"
+                  >
+                    <span>⚠️ 通報</span>
+                    {reportsCount > 0 && (
+                      <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">
+                        {reportsCount}
+                      </span>
+                    )}
+                  </button>
 
-                {/* 申請リストポップアップ */}
-                {showApplications && (
-                  <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-lg shadow-xl border border-orange-200 overflow-hidden z-50 flex flex-col max-h-[60vh]">
-                    <div className="bg-orange-50 px-4 py-3 border-b border-orange-200 flex justify-between items-center flex-shrink-0">
-                      <h3 className="font-bold text-orange-800 text-sm">新規利用申請 ({pendingAppsCount})</h3>
-                    </div>
-                    <div className="overflow-y-auto flex-grow">
-                      {applications.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">現在、未対応の申請はありません</div>
-                      ) : (
-                        <div className="divide-y divide-gray-100">
-                          {applications.map((app) => (
-                            <div key={app.id} className="p-4 hover:bg-gray-50 transition-colors">
-                              <div className="mb-2">
-                                <h4 className="font-bold text-sm text-gray-800">{app.organization_name}</h4>
-                                <p className="text-xs text-gray-500 font-mono mb-1">{app.email}</p>
-                                <p className="text-xs text-gray-400">{formatDate(app.created_at)}</p>
-                              </div>
-                              <div className="bg-gray-50 p-2 rounded text-xs text-gray-700 mb-3 whitespace-pre-wrap">
-                                {app.activity_details}
-                              </div>
-                              <div className="flex gap-2 justify-end">
-                                <button 
-                                  onClick={() => handleReject(app.id, app.email, app.organization_name)}
-                                  className="px-3 py-1 text-xs text-gray-500 hover:bg-gray-200 rounded border border-gray-300"
-                                >
-                                  却下
-                                </button>
-                                <button 
-                                  onClick={() => handleApprove(app)}
-                                  className="px-3 py-1 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded"
-                                >
-                                  承認・招待
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                  {/* 通報リストポップアップ */}
+                  {showReports && (
+                    <>
+                      <div 
+                        className="fixed inset-0 bg-black/20 z-40 md:hidden"
+                        onClick={() => setShowReports(false)}
+                      />
+                      <div className="fixed top-20 left-4 right-4 z-50 md:absolute md:inset-auto md:right-0 md:top-full md:w-96 bg-white rounded-lg shadow-xl border border-red-200 overflow-hidden flex flex-col max-h-[70vh]">
+                        <div className="bg-red-50 px-4 py-3 border-b border-red-200 flex justify-between items-center flex-shrink-0">
+                          <h3 className="font-bold text-red-800 text-sm">不適切な投稿の報告 ({reportsCount})</h3>
+                          <button onClick={() => setShowReports(false)} className="md:hidden text-gray-500">✕</button>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            {/* ▲▲▲ ここまで ▲▲▲ */}
+                        <div className="overflow-y-auto flex-grow">
+                          {reports.length === 0 ? (
+                            <div className="p-4 text-center text-gray-500 text-sm">現在、通報はありません</div>
+                          ) : (
+                            <div className="divide-y divide-gray-100">
+                              {reports.map((report) => (
+                                <div key={report.id} className="p-4 hover:bg-gray-50 transition-colors">
+                                  <div className="mb-2">
+                                    <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold">Reason</span>
+                                    <p className="text-sm font-bold text-gray-800 mt-1 whitespace-pre-wrap">{report.reason}</p>
+                                  </div>
+                                  
+                                  {report.events ? (
+                                    <div className="bg-gray-100 p-2 rounded mb-2 text-xs">
+                                      <p className="text-gray-500">対象イベント:</p>
+                                      <Link href={`/events/${report.events.id}`} target="_blank" className="text-blue-600 font-bold hover:underline truncate block">
+                                        {report.events.title}
+                                      </Link>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-gray-400 mb-2">※対象イベントは既に削除されました</p>
+                                  )}
 
-            {/* メッセージアイコン */}
-            <div className="relative" ref={messagePanelRef}>
+                                  <div className="flex justify-between items-center mt-2">
+                                    <span className="text-xs text-gray-400">{formatDate(report.created_at)}</span>
+                                    <button 
+                                      onClick={() => deleteReport(report.id)}
+                                      className="text-xs text-gray-500 hover:text-red-600 underline"
+                                    >
+                                      対応済みとして削除
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* 申請ボックスボタン */}
+                <div className="relative" ref={applicationPanelRef}>
+                  <button
+                    onClick={() => setShowApplications(!showApplications)}
+                    className="relative px-3 py-2 text-orange-700 font-bold hover:bg-orange-50 rounded-lg transition-colors flex items-center gap-2 border border-orange-200 text-sm"
+                    title="申請ボックス"
+                  >
+                    <span>新規申請</span>
+                    {pendingAppsCount > 0 && (
+                      <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">
+                        {pendingAppsCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 申請リストポップアップ */}
+                  {showApplications && (
+                    <>
+                      <div 
+                        className="fixed inset-0 bg-black/20 z-40 md:hidden"
+                        onClick={() => setShowApplications(false)}
+                      />
+                      <div className="fixed top-20 left-4 right-4 z-50 md:absolute md:inset-auto md:right-0 md:top-full md:w-96 bg-white rounded-lg shadow-xl border border-orange-200 overflow-hidden flex flex-col max-h-[70vh]">
+                        <div className="bg-orange-50 px-4 py-3 border-b border-orange-200 flex justify-between items-center flex-shrink-0">
+                          <h3 className="font-bold text-orange-800 text-sm">新規利用申請 ({pendingAppsCount})</h3>
+                          <button onClick={() => setShowApplications(false)} className="md:hidden text-gray-500">✕</button>
+                        </div>
+                        <div className="overflow-y-auto flex-grow">
+                          {applications.length === 0 ? (
+                            <div className="p-4 text-center text-gray-500 text-sm">現在、未対応の申請はありません</div>
+                          ) : (
+                            <div className="divide-y divide-gray-100">
+                              {applications.map((app) => (
+                                <div key={app.id} className="p-4 hover:bg-gray-50 transition-colors">
+                                  <div className="mb-2">
+                                    <h4 className="font-bold text-sm text-gray-800">{app.organization_name}</h4>
+                                    <p className="text-xs text-gray-500 font-mono mb-1">{app.email}</p>
+                                    <p className="text-xs text-gray-400">{formatDate(app.created_at)}</p>
+                                  </div>
+                                  <div className="bg-gray-50 p-2 rounded text-xs text-gray-700 mb-3 whitespace-pre-wrap">
+                                    {app.activity_details}
+                                  </div>
+                                  <div className="flex gap-2 justify-end">
+                                    <button 
+                                      onClick={() => handleReject(app.id, app.email, app.organization_name)}
+                                      className="px-3 py-1 text-xs text-gray-500 hover:bg-gray-200 rounded border border-gray-300"
+                                    >
+                                      却下
+                                    </button>
+                                    <button 
+                                      onClick={() => handleApprove(app)}
+                                      className="px-3 py-1 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded"
+                                    >
+                                      承認・招待
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* メールメニュー */}
+            <div className="relative" ref={mailMenuRef}>
               <button 
-                onClick={() => setShowMessages(!showMessages)}
-                className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
-                title="お知らせ"
+                onClick={() => setShowMailMenu(!showMailMenu)}
+                className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors flex items-center gap-1"
+                title="メール"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect width="20" height="16" x="2" y="4" rx="2" />
@@ -583,77 +706,103 @@ export default function AdminDashboard() {
                 )}
               </button>
 
-              {/* メッセージパネル */}
-              {showMessages && (
-                <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50 flex flex-col max-h-[60vh]">
-                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-                    <h3 className="font-bold text-gray-700 text-sm">お知らせ ({messages.length})</h3>
-                    {unreadCount > 0 && <span className="text-xs text-red-600 font-bold">{unreadCount}件の未読</span>}
-                  </div>
-                  <div className="overflow-y-auto flex-grow">
-                    {messages.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500 text-sm">お知らせはありません</div>
-                    ) : (
-                      <div className="divide-y divide-gray-100">
-                        {messages.map((msg) => (
-                          <div key={msg.id} className={`p-4 hover:bg-gray-50 transition-colors ${!msg.is_read ? 'bg-yellow-50' : ''}`}>
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="font-bold text-xs text-gray-600">{msg.sender?.name || '管理者'}</span>
-                              <span className="text-xs text-gray-400">{formatDate(msg.created_at)}</span>
-                            </div>
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap mb-3 break-words">{msg.content}</p>
-                            <div className="flex justify-end items-center gap-3">
-                              <button onClick={() => deleteMessage(msg.id)} className="text-gray-400 hover:text-red-600 transition-colors" title="削除">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                              </button>
-                              {!msg.is_read && (
-                                <button onClick={() => markAsRead(msg.id)} className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                  既読にする
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              {/* メール選択メニュー */}
+              {showMailMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50 animate-fadeIn">
+                  <div className="p-1">
+                    <button
+                      onClick={() => {
+                        setShowMailMenu(false);
+                        setShowMessages(true); // 受信箱を開く
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded flex justify-between items-center"
+                    >
+                      <span>📥 お知らせ (受信)</span>
+                      {unreadCount > 0 && <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>}
+                    </button>
+                    <Link
+                      href="/admin/messages"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded block"
+                      onClick={() => setShowMailMenu(false)}
+                    >
+                      📤 メッセージ作成
+                    </Link>
                   </div>
                 </div>
               )}
+
+              {/* 受信箱パネル (スマホ対応) */}
+              {showMessages && (
+                <>
+                  <div 
+                    className="fixed inset-0 bg-black/20 z-40 md:hidden"
+                    onClick={() => setShowMessages(false)}
+                  />
+                  <div className="fixed top-20 left-4 right-4 z-50 md:absolute md:inset-auto md:right-0 md:top-full md:w-96 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden flex flex-col max-h-[70vh]">
+                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+                      <h3 className="font-bold text-gray-700 text-sm">お知らせ ({messages.length})</h3>
+                      <div className="flex items-center gap-2">
+                        {unreadCount > 0 && <span className="text-xs text-red-600 font-bold">{unreadCount}件の未読</span>}
+                        <button onClick={() => setShowMessages(false)} className="md:hidden text-gray-500 ml-2">✕</button>
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto flex-grow">
+                      {messages.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500 text-sm">お知らせはありません</div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {messages.map((msg) => (
+                            <div key={msg.id} className={`p-4 hover:bg-gray-50 transition-colors ${!msg.is_read ? 'bg-yellow-50' : ''}`}>
+                              <div className="flex justify-between items-start mb-1">
+                                <span className="font-bold text-xs text-gray-600">{msg.sender?.name || '管理者'}</span>
+                                <span className="text-xs text-gray-400">{formatDate(msg.created_at)}</span>
+                              </div>
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap mb-3 break-words">{msg.content}</p>
+                              <div className="flex justify-end items-center gap-3">
+                                <button onClick={() => deleteMessage(msg.id)} className="text-gray-400 hover:text-red-600 transition-colors" title="削除">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                                {!msg.is_read && (
+                                  <button onClick={() => markAsRead(msg.id)} className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    既読にする
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
-            <Link href="/admin/messages" className="text-sm font-bold text-blue-600 border border-blue-300 px-4 py-2 rounded-lg hover:bg-blue-50 bg-white flex items-center gap-1">
-              <span>✉</span> {hasAdminPrivileges ? '送信' : '連絡'}
-            </Link>
-
-            <Link href="/admin/profile" className="text-sm font-bold text-gray-600 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 bg-white">
-              ⚙ プロフィール
+            <Link href="/admin/profile" className="text-sm font-bold text-gray-600 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 bg-white">
+              <span className="md:hidden">⚙</span>
+              <span className="hidden md:inline">⚙ プロフィール</span>
             </Link>
             
-            <button onClick={handleLogout} className="text-sm text-red-600 underline ml-2">
+            <button onClick={handleLogout} className="text-xs md:text-sm text-red-600 underline ml-2 whitespace-nowrap">
               ログアウト
             </button>
           </div>
         </div>
 
-        {/* --- 申請ボックス (管理者の場合のみ表示) --- */}
-        {/* ※ボタン式ポップアップに変更したので、ページ内の申請リスト表示は削除（またはお好みで残す）
-            今回はヘッダーの「新規申請」ボタンですべて管理するようにしたため、
-            ページ中段の大きな申請ボックスは削除してスッキリさせました。 */}
-
-        {/* --- 招待QRコードエリア (管理者のみ) --- */}
+        {/* ... (QRコード等は変更なし) ... */}
         {hasAdminPrivileges && (
           <div className="mb-8">
              <button
                onClick={() => setShowQrCode(!showQrCode)}
-               className="flex items-center gap-2 text-teal-700 font-bold border border-teal-300 bg-teal-50 px-4 py-2 rounded-lg hover:bg-teal-100 transition shadow-sm"
+               className="w-full md:w-auto flex justify-center items-center gap-2 text-teal-700 font-bold border border-teal-300 bg-teal-50 px-4 py-3 rounded-lg hover:bg-teal-100 transition shadow-sm"
              >
                <span className="text-xl">🎟️</span>
                {showQrCode ? '招待QRコードを隠す' : '手動招待用QRコードを表示'}
              </button>
              {showQrCode && (
                <div className="mt-4 bg-white p-6 rounded-xl shadow-md border border-teal-200 flex flex-col md:flex-row items-center gap-6 animate-fadeIn">
-                 <div className="bg-white p-2 border border-gray-200 rounded-lg">
+                 <div className="bg-white p-2 border border-gray-200 rounded-lg flex justify-center">
                    {inviteUrl && <QRCodeSVG value={inviteUrl} size={150} />}
                  </div>
                  <div className="flex-1">
@@ -672,7 +821,7 @@ export default function AdminDashboard() {
         )}
 
         <div className="mb-6">
-          <Link href="/admin/create" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-700 inline-block">
+          <Link href="/admin/create" className="block w-full md:w-auto text-center bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-700">
             + 新しいイベントを作る
           </Link>
         </div>
@@ -682,29 +831,105 @@ export default function AdminDashboard() {
           <div className="space-y-10">
             {/* 自分の投稿 */}
             <div className="bg-white rounded-lg shadow overflow-hidden border-2 border-blue-100">
-              <div className="bg-blue-50 px-6 py-3 border-b border-blue-200">
-                <h3 className="font-bold text-blue-800">📌 あなた（{myProfile?.role === 'super_admin' ? '特権管理者' : '全体管理者'}）の投稿</h3>
+              <div className="bg-blue-50 px-4 py-3 border-b border-blue-200">
+                <h3 className="font-bold text-blue-800 text-sm md:text-base">📌 あなた（{myProfile?.role === 'super_admin' ? '特権管理者' : '全体管理者'}）の投稿</h3>
               </div>
-              <EventTable events={myEvents} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} emptyMessage="まだあなたの投稿はありません。" />
+              
+              <EventTable 
+                events={myUpcoming} 
+                onDelete={handleDelete} 
+                onToggleHidden={handleToggleHidden} 
+                isSuperAdmin={isSuperAdmin} 
+                emptyMessage="開催予定の投稿はありません。" 
+              />
+              
+              {myPast.length > 0 && (
+                <details className="group border-t border-gray-100">
+                  <summary className="cursor-pointer bg-gray-50 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-100 flex items-center gap-2">
+                    <span className="group-open:rotate-90 transition-transform">▶</span>
+                    終了したイベントを表示 ({myPast.length})
+                  </summary>
+                  <EventTable 
+                    events={myPast} 
+                    onDelete={handleDelete} 
+                    onToggleHidden={handleToggleHidden} 
+                    isSuperAdmin={isSuperAdmin} 
+                  />
+                </details>
+              )}
             </div>
+
             {/* 他の団体の投稿 */}
             {Object.keys(groupedOtherEvents).length > 0 && (
               <div className="space-y-6">
-                <h2 className="text-xl font-bold text-gray-700 pl-2 border-l-4 border-gray-400">他の団体の投稿</h2>
-                {Object.entries(groupedOtherEvents).map(([posterName, groupEvents]) => (
-                  <div key={posterName} className="bg-white rounded-lg shadow overflow-hidden">
-                    <div className="bg-gray-100 px-6 py-3 border-b border-gray-200">
-                      <h3 className="font-bold text-gray-700">📂 {posterName}</h3>
+                <h2 className="text-lg md:text-xl font-bold text-gray-700 pl-2 border-l-4 border-gray-400">他の団体の投稿</h2>
+                {Object.entries(groupedOtherEvents).map(([posterName, groupEvents]) => {
+                  const { upcoming: groupUpcoming, past: groupPast } = splitEventsByDate(groupEvents);
+                  
+                  return (
+                    <div key={posterName} className="bg-white rounded-lg shadow overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-3 border-b border-gray-200">
+                        <h3 className="font-bold text-gray-700 text-sm md:text-base">📂 {posterName}</h3>
+                      </div>
+                      
+                      <EventTable 
+                        events={groupUpcoming} 
+                        onDelete={handleDelete} 
+                        onToggleHidden={handleToggleHidden} 
+                        isSuperAdmin={isSuperAdmin}
+                        emptyMessage="開催予定の投稿はありません。"
+                      />
+
+                      {groupPast.length > 0 && (
+                         <details className="group border-t border-gray-100">
+                           <summary className="cursor-pointer bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 flex items-center gap-2">
+                             <span className="group-open:rotate-90 transition-transform">▶</span>
+                             終了したイベント ({groupPast.length})
+                           </summary>
+                           <EventTable 
+                             events={groupPast} 
+                             onDelete={handleDelete} 
+                             onToggleHidden={handleToggleHidden} 
+                             isSuperAdmin={isSuperAdmin} 
+                           />
+                         </details>
+                      )}
                     </div>
-                    <EventTable events={groupEvents} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         ) : (
+          // 一般投稿者
           <div className="bg-white rounded-lg shadow overflow-hidden">
-            <EventTable events={events} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} />
+            <div className="bg-teal-50 px-4 py-3 border-b border-teal-100">
+              <h3 className="font-bold text-teal-800 text-sm md:text-base">開催予定・開催中のイベント</h3>
+            </div>
+            <EventTable 
+              events={myUpcoming} 
+              onDelete={handleDelete} 
+              onToggleHidden={handleToggleHidden} 
+              isSuperAdmin={isSuperAdmin} 
+              emptyMessage="現在、掲載中のイベントはありません。"
+            />
+
+            {myPast.length > 0 && (
+              <details className="group border-t border-gray-200">
+                <summary className="cursor-pointer bg-gray-100 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-200 flex items-center gap-2">
+                  <span className="group-open:rotate-90 transition-transform">▶</span>
+                  終了したイベントを表示 ({myPast.length})
+                </summary>
+                <div className="bg-gray-50">
+                  <EventTable 
+                    events={myPast} 
+                    onDelete={handleDelete} 
+                    onToggleHidden={handleToggleHidden} 
+                    isSuperAdmin={isSuperAdmin} 
+                  />
+                </div>
+              </details>
+            )}
           </div>
         )}
       </div>
@@ -712,7 +937,7 @@ export default function AdminDashboard() {
   );
 }
 
-// --- テーブルコンポーネント ---
+// --- テーブルコンポーネント（PCレイアウト修正 & 「隠す」→「非公開」） ---
 function EventTable({ events, onDelete, onToggleHidden, isSuperAdmin, emptyMessage = "投稿がありません" }: { 
   events: Event[], 
   onDelete: (id: number, poster_id?: string, title?: string) => void, 
@@ -721,68 +946,103 @@ function EventTable({ events, onDelete, onToggleHidden, isSuperAdmin, emptyMessa
   emptyMessage?: string 
 }) {
   if (events.length === 0) {
-    return <div className="p-6 text-center text-gray-500">{emptyMessage}</div>;
+    return <div className="p-6 text-center text-gray-400 text-sm">{emptyMessage}</div>;
   }
 
   return (
-    <table className="min-w-full divide-y divide-gray-200">
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">開催日</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">イベント名</th>
-          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">閲覧数</th>
-          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
+    <div className="w-full">
+      {/* PC表示用ヘッダー (md以上で表示) */}
+      <div className="hidden md:grid grid-cols-12 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+        <div className="col-span-2">開催日</div>
+        {/* タイトル列を少し減らして操作列を広げる */}
+        <div className="col-span-5">イベント名</div>
+        <div className="col-span-1 text-center">閲覧数</div>
+        <div className="col-span-4 text-right">操作</div>
+      </div>
+
+      <div className="divide-y divide-gray-200">
         {events.map((event) => (
-          <tr key={event.id} className={event.is_hidden ? "bg-gray-100" : ""}>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {event.event_date}
-              {event.is_hidden && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-500 text-white">
-                  非表示中
-                </span>
-              )}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-              <Link href={`/admin/edit/${event.id}`} className={`hover:text-blue-600 hover:underline ${event.is_hidden ? 'text-gray-500' : ''}`}>
+          <div key={event.id} className={`p-4 md:px-6 md:py-4 ${event.is_hidden ? "bg-gray-100" : "bg-white"}`}>
+            
+            {/* --- スマホ用レイアウト (md未満) --- */}
+            <div className="md:hidden">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm text-gray-500 font-mono">{event.event_date}</span>
+                {event.is_hidden && (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-500 text-white">非表示中</span>
+                )}
+              </div>
+              
+              <Link href={`/admin/edit/${event.id}`} className={`block text-base font-bold mb-2 ${event.is_hidden ? 'text-gray-500' : 'text-gray-900'}`}>
                 {event.title}
               </Link>
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-600">
-              {event.view_count || 0}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               
-              {isSuperAdmin && (
-                <button
-                  onClick={() => onToggleHidden(event.id, event.is_hidden, event.poster_id, event.title)}
-                  className={`mr-4 font-bold ${event.is_hidden ? 'text-blue-600 hover:text-blue-900' : 'text-gray-400 hover:text-gray-700'}`}
-                  title={event.is_hidden ? "公開する" : "非表示にする"}
-                >
-                  {event.is_hidden ? '公開する' : '非表示'}
-                </button>
-              )}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {event.category && (
+                  <span className="px-2 py-0.5 text-xs bg-teal-50 text-teal-700 rounded border border-teal-100">
+                    {event.category}
+                  </span>
+                )}
+                <span className="text-xs text-gray-500">閲覧数: <span className="font-bold">{event.view_count || 0}</span></span>
+              </div>
 
-              <Link href={`/events/${event.id}`} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-900 font-bold mr-4 inline-flex items-center gap-1" title="実際のページを確認">
-                確認
-              </Link>
+              <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100">
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => onToggleHidden(event.id, event.is_hidden, event.poster_id, event.title)}
+                    className={`text-xs font-bold ${event.is_hidden ? 'text-blue-600' : 'text-gray-400'}`}
+                  >
+                    {event.is_hidden ? '公開する' : '非公開'}
+                  </button>
+                )}
+                <Link href={`/events/${event.id}`} target="_blank" className="text-xs text-gray-500 font-bold">確認</Link>
+                <Link href={`/admin/create?copy_from=${event.id}`} className="text-xs text-teal-600 font-bold">コピー</Link>
+                <Link href={`/admin/edit/${event.id}`} className="text-xs text-indigo-600 font-bold">編集</Link>
+                <button onClick={() => onDelete(event.id, event.poster_id, event.title)} className="text-xs text-red-600">削除</button>
+              </div>
+            </div>
 
-              <Link href={`/admin/create?copy_from=${event.id}`} className="text-teal-600 hover:text-teal-900 font-bold mr-4 inline-flex items-center gap-1" title="この内容をコピーして新規作成">
-                <span className="text-lg">📄</span> コピー
-              </Link>
+            {/* --- PC用レイアウト (md以上) --- */}
+            <div className="hidden md:grid grid-cols-12 items-center">
+              <div className="col-span-2 text-sm text-gray-500">
+                {event.event_date}
+                {event.is_hidden && (
+                  <span className="ml-2 px-2 py-0.5 rounded text-xs bg-gray-500 text-white">非表示</span>
+                )}
+              </div>
+              <div className="col-span-5">
+                <Link href={`/admin/edit/${event.id}`} className={`text-sm font-medium hover:underline ${event.is_hidden ? 'text-gray-500' : 'text-gray-900'}`}>
+                  {event.title}
+                </Link>
+                {event.category && (
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-teal-50 text-teal-700 rounded border border-teal-100">
+                    {event.category}
+                  </span>
+                )}
+              </div>
+              <div className="col-span-1 text-center text-sm font-bold text-gray-600">
+                {event.view_count || 0}
+              </div>
+              {/* 操作ボタンエリアを広げ、flexで横並びを確実に */}
+              <div className="col-span-4 text-right text-sm font-medium flex justify-end items-center gap-4">
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => onToggleHidden(event.id, event.is_hidden, event.poster_id, event.title)}
+                    className={`${event.is_hidden ? 'text-blue-600' : 'text-gray-400'} whitespace-nowrap`}
+                  >
+                    {event.is_hidden ? '公開' : '非公開'}
+                  </button>
+                )}
+                <Link href={`/events/${event.id}`} target="_blank" className="text-gray-500 hover:text-gray-900 whitespace-nowrap">確認</Link>
+                <Link href={`/admin/create?copy_from=${event.id}`} className="text-teal-600 hover:text-teal-900 whitespace-nowrap">コピー</Link>
+                <Link href={`/admin/edit/${event.id}`} className="text-indigo-600 hover:text-indigo-900 whitespace-nowrap">編集</Link>
+                <button onClick={() => onDelete(event.id, event.poster_id, event.title)} className="text-red-600 hover:text-red-900 whitespace-nowrap">削除</button>
+              </div>
+            </div>
 
-              <Link href={`/admin/edit/${event.id}`} className="text-indigo-600 hover:text-indigo-900 font-bold mr-4">
-                編集
-              </Link>
-              <button onClick={() => onDelete(event.id, event.poster_id, event.title)} className="text-red-600 hover:text-red-900">
-                削除
-              </button>
-            </td>
-          </tr>
+          </div>
         ))}
-      </tbody>
-    </table>
+      </div>
+    </div>
   );
 }

@@ -34,6 +34,14 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        
+        {/* ★追加: 戻るリンク */}
+        <div className="mb-4">
+          <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+            ← ホームへ戻る
+          </Link>
+        </div>
+
         <h1 className="text-2xl font-bold mb-6 text-center">関係者ログイン</h1>
         
         {errorMsg && (

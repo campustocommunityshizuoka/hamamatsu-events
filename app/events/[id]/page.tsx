@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
 import AccessibilityMenu from '@/app/components/AccessibilityMenu';
 import ViewCounter from '@/app/components/ViewCounter';
+import ReportButton from '@/app/components/ReportButton'; 
 
 export const runtime = 'edge';
 export const revalidate = 0;
@@ -14,9 +15,9 @@ type Event = {
   description: string | null;
   event_date: string;
   location: string | null;
+  category: string | null;
   contact_phone: string | null;
   image_url: string | null;
-  // view_count: number; // 表示しないので型定義からも消しても良いですが、データとしては取得しているので残しておいても無害です
   profiles: {
     name: string | null;
     avatar_url: string | null;
@@ -63,6 +64,7 @@ export default async function EventDetailPage({
 
   const readingText = `
     イベント名、${event.title}。
+    カテゴリ、${event.category || 'なし'}。
     開催日、${spokenDate}。
     場所、${event.location || '未定'}。
     内容は以下の通りです。${event.description || '詳細はありません'}。
@@ -72,7 +74,7 @@ export default async function EventDetailPage({
   return (
     <main className="min-h-screen bg-white pb-20 font-sans">
       
-      {/* 裏側でカウントアップ処理は実行（管理画面の集計用） */}
+      {/* カウントアップ処理 */}
       <ViewCounter eventId={event.id} />
       
       {/* アクセシビリティメニュー */}
@@ -85,13 +87,14 @@ export default async function EventDetailPage({
       </div>
 
       <div className="max-w-2xl mx-auto">
-        {/* 画像エリア（バッジを削除しました） */}
-        <div className="w-full aspect-video bg-gray-200">
+        {/* 画像エリア */}
+        {/* ★修正: aspect-videoを削除し、高さを指定。object-coverに変更 */}
+        <div className="w-full h-64 md:h-96 bg-gray-200">
           {event.image_url ? (
             <img 
               src={event.image_url} 
               alt={event.title} 
-              className="w-full h-full object-contain" 
+              className="w-full h-full object-cover" 
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400 text-2xl">
@@ -101,25 +104,33 @@ export default async function EventDetailPage({
         </div>
 
         <div className="p-6 space-y-8">
-             <div className="flex items-center gap-3 border-b pb-4">
-                 <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
-                   {posterIcon ? (
-                     <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
-                   ) : (
-                     <svg className="w-full h-full text-gray-500 p-2" fill="currentColor" viewBox="0 0 24 24">
-                       <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                     </svg>
-                   )}
-                 </div>
-                 <div>
-                   <p className="text-xs text-gray-500">投稿・主催</p>
-                   <p className="text-lg font-bold text-gray-800">{posterName}</p>
-                 </div>
+              <div className="flex items-center gap-3 border-b pb-4">
+                  <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
+                    {posterIcon ? (
+                      <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
+                    ) : (
+                      <svg className="w-full h-full text-gray-500 p-2" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">投稿・主催</p>
+                    <p className="text-lg font-bold text-gray-800">{posterName}</p>
+                  </div>
               </div>
 
-              <h1 className="text-3xl font-bold text-gray-900 leading-tight">
-                {event.title}
-              </h1>
+              <div>
+                {/* カテゴリ表示 */}
+                {event.category && (
+                  <span className="inline-block bg-teal-100 text-teal-800 text-base font-bold px-4 py-1.5 rounded-full mb-2 border border-teal-200">
+                    {event.category}
+                  </span>
+                )}
+                <h1 className="text-3xl font-bold text-gray-900 leading-tight">
+                  {event.title}
+                </h1>
+              </div>
 
               <div className="space-y-6 text-xl">
                 <div>
@@ -131,16 +142,16 @@ export default async function EventDetailPage({
                   <span className="text-gray-500 text-sm block mb-3">どこで</span>
                   <div className="flex flex-col md:flex-row gap-6">
                     <div className="flex-1">
-                       <p className="font-bold text-2xl mb-2">{event.location}</p>
-                       <a 
-                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location || '')}`}
-                         target="_blank"
-                         rel="noopener noreferrer"
-                         className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
-                       >
-                         Googleマップアプリで見る
-                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                       </a>
+                        <p className="font-bold text-2xl mb-2">{event.location}</p>
+                        <a 
+                          href={`http://googleusercontent.com/maps.google.com/?q=${encodeURIComponent(event.location || '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
+                        >
+                          Googleマップアプリで見る
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </a>
                     </div>
 
                     <div className="w-full md:w-1/2 h-64 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
@@ -176,6 +187,12 @@ export default async function EventDetailPage({
                     {event.description}
                   </p>
                 </div>
+
+                {/* 通報ボタン */}
+                <div className="mt-8 flex justify-end">
+                  <ReportButton eventId={event.id} />
+                </div>
+
               </div>
         </div>
       </div>

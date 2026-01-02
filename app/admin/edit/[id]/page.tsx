@@ -8,7 +8,6 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import imageCompression from 'browser-image-compression';
 
-// ... (定数などはそのまま) ...
 const AREA_OPTIONS = [
   "中央区（旧中区）",
   "中央区（旧東区）",
@@ -19,22 +18,36 @@ const AREA_OPTIONS = [
   "浜名区（旧北区）",
   "天竜区（旧天竜区）"
 ];
+
+const CATEGORY_OPTIONS = [
+  "お祭り・マルシェ",
+  "音楽・ライブ",
+  "スポーツ・運動",
+  "学び・講座",
+  "ボランティア",
+  "子育て・子供向け",
+  "展示・芸術",
+  "その他"
+];
+
 const IMAGE_UPDATE_LIMIT = 2;
 
 export default function EditEventPage() {
-  // ... (useStateなどはそのまま) ...
   const router = useRouter();
   const params = useParams();
   const id = params.id; 
 
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  
   const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
   const [area, setArea] = useState('');
   const [date, setDate] = useState('');
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
+  
   const [posterId, setPosterId] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -42,7 +55,6 @@ export default function EditEventPage() {
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
 
-  // ... (useEffectなどはそのまま) ...
   useEffect(() => {
     const fetchEventAndProfile = async () => {
       if (!id) return;
@@ -57,6 +69,7 @@ export default function EditEventPage() {
         if (error) throw error;
         if (data) {
           setTitle(data.title || '');
+          setCategory(data.category || '');
           setArea(data.area || '');
           setDate(data.event_date || '');
           setLocation(data.location || '');
@@ -76,17 +89,11 @@ export default function EditEventPage() {
     fetchEventAndProfile();
   }, [id, router]);
 
-  // 画像URLからファイルパスを抽出するヘルパー関数（修正版）
   const getFilePathFromUrl = (url: string) => {
     try {
-      // URLの例: https://.../storage/v1/object/public/event-images/folder/filename.jpg
       const parts = url.split('/event-images/');
       if (parts.length > 1) {
-        // ★修正: decodeURIComponentを使って、%E3...を日本語に戻す
-        // これがないと日本語ファイル名の削除に失敗します
-        const path = decodeURIComponent(parts[1]);
-        console.log('削除対象のパスを特定しました:', path); // デバッグ用ログ
-        return path;
+        return decodeURIComponent(parts[1]);
       }
       return null;
     } catch (e) {
@@ -95,9 +102,7 @@ export default function EditEventPage() {
     }
   };
 
-  // ... (uploadImage関数はそのまま) ...
   const uploadImage = async (file: File) => {
-    // ... 省略（前回のコードと同じ）...
     try {
       console.log(`圧縮前: ${(file.size / 1024).toFixed(2)} KB`);
       const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.7 };
@@ -118,8 +123,8 @@ export default function EditEventPage() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    // ... (バリデーション等はそのまま) ...
-    if (!title || !date || !area) { alert('活動名、地域、開催日は必須です'); return; }
+    if (!title || !date || !area || !category) { alert('活動名、カテゴリ、地域、開催日は必須です'); return; }
+    
     const hasAdminPrivileges = ['admin', 'super_admin'].includes(myRole || '');
     if (newImageFile && !hasAdminPrivileges && imageUpdateCount >= IMAGE_UPDATE_LIMIT) {
       alert(`このイベントの写真は既に${IMAGE_UPDATE_LIMIT}回変更されているため、これ以上変更できません。`);
@@ -139,17 +144,16 @@ export default function EditEventPage() {
 
     try {
       const { data: { session }, error: authError } = await supabase.auth.getSession();
+      // authError変数を使用しないとエラーになるため、条件式に含める
       if (authError || !session) throw new Error('ログインセッションが切れました。');
 
       let imageUrl = currentImageUrl;
       let nextImageUpdateCount = imageUpdateCount;
 
       if (newImageFile) {
-        // 1. 新しい画像をアップロード
         imageUrl = await uploadImage(newImageFile);
         nextImageUpdateCount = imageUpdateCount + 1;
 
-        // ★追加: 古い画像があればStorageから削除する
         if (currentImageUrl) {
           const oldFilePath = getFilePathFromUrl(currentImageUrl);
           if (oldFilePath) {
@@ -157,25 +161,30 @@ export default function EditEventPage() {
               .from('event-images')
               .remove([oldFilePath]);
             
+            // deleteError変数を使用
             if (deleteError) console.error('旧画像削除失敗:', deleteError);
-            else console.log('旧画像を削除しました:', oldFilePath);
           }
         }
       }
 
-      // 2. データベース更新
       const { error: updateError } = await supabase
         .from('events')
         .update({
-          title, area, event_date: date, location, contact_phone: phone,
-          description, image_url: imageUrl, image_update_count: nextImageUpdateCount,
+          title, 
+          category,
+          area, 
+          event_date: date, 
+          location, 
+          contact_phone: phone,
+          description, 
+          image_url: imageUrl, 
+          image_update_count: nextImageUpdateCount,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
 
       if (updateError) throw updateError;
 
-      // ... (メッセージ送信処理はそのまま) ...
       if (editReason && posterId && currentUserId) {
         await supabase.from('messages').insert({
             sender_id: currentUserId, receiver_id: posterId,
@@ -186,9 +195,13 @@ export default function EditEventPage() {
       if (!editReason) alert('イベントを更新しました！');
       router.push('/admin');
 
-    } catch (error: any) {
+    } catch (error: unknown) { // ★修正: any型を避ける
       console.error(error);
-      alert(error.message || '更新エラー');
+      let message = '更新エラー';
+      if (error instanceof Error) {
+        message = error.message;
+      }
+      alert(message);
     } finally {
       setUpdating(false);
     }
@@ -196,7 +209,6 @@ export default function EditEventPage() {
 
   if (loading) return <div className="p-10 text-center text-gray-500">データを読み込んでいます...</div>;
 
-  // ... (JSX部分は変更なし) ...
   const isImageLocked = !['admin', 'super_admin'].includes(myRole || '') && imageUpdateCount >= IMAGE_UPDATE_LIMIT;
 
   return (
@@ -204,26 +216,38 @@ export default function EditEventPage() {
       <div className="max-w-2xl mx-auto bg-white p-6 md:p-8 rounded-lg shadow-md border border-gray-100">
         <h1 className="text-2xl font-bold mb-6 text-teal-800 text-center">投稿の編集</h1>
         <form onSubmit={handleUpdate} className="space-y-6">
-          {/* ... (入力フォーム部分は変更なし) ... */}
+          
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">活動名</label>
             <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
           </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">カテゴリ</label>
+            <select required value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white">
+              <option value="">選択してください</option>
+              {CATEGORY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">地域</label>
-            <select required value={area} onChange={(e) => setArea(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm">
+            <select required value={area} onChange={(e) => setArea(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white">
               <option value="">選択してください</option>
               {AREA_OPTIONS.map((op) => <option key={op} value={op}>{op}</option>)}
             </select>
           </div>
+
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">開催日</label>
             <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
           </div>
+
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">活動詳細</label>
             <textarea rows={6} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
           </div>
+
           <div className="border-t pt-6">
             <label className="block text-sm font-bold text-gray-700 mb-2">写真</label>
             {currentImageUrl && !newImageFile && (
@@ -246,10 +270,12 @@ export default function EditEventPage() {
               <input type="file" accept="image/*" onChange={(e) => setNewImageFile(e.target.files?.[0] || null)} className="block w-full text-sm text-gray-500" />
             )}
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
             <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="場所" className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
             <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="電話番号" className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
           </div>
+
           <div className="flex flex-col gap-4 pt-4">
             <button type="submit" disabled={updating} className="w-full bg-teal-700 text-white py-3 px-4 rounded-md font-bold disabled:opacity-50">{updating ? '更新中...' : '変更を保存する'}</button>
             <Link href="/admin" className="text-center text-gray-500 underline text-sm">キャンセル</Link>

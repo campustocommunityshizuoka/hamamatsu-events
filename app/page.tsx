@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { formatDate, getDaysUntil } from '@/lib/utils';
-// import PostButton from '@/app/components/PostButton'; // 削除
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -16,6 +15,7 @@ type Event = {
   event_date: string;
   location: string | null;
   area: string | null;
+  category: string | null;
   image_url: string | null;
   profiles: {
     name: string | null;
@@ -23,7 +23,7 @@ type Event = {
   } | null;
 };
 
-// 戻り値の型を変更（件数情報を含めるため）
+// 戻り値の型
 type EventsResult = {
   events: Event[];
   total: number | null;
@@ -43,21 +43,21 @@ async function getEvents(page: number): Promise<EventsResult> {
   const today = new Date().toISOString().split('T')[0];
   const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // ページネーションの計算（何件目から何件目までを取得するか）
+  // ページネーションの計算
   const from = (page - 1) * PER_PAGE;
   const to = from + PER_PAGE - 1;
 
   const { data, error, count } = await supabase
     .from('events')
     .select(`
-      id, title, event_date, location, area, image_url,
+      id, title, event_date, location, area, category, image_url,
       profiles ( name, avatar_url ) 
-    `, { count: 'exact' }) // count: 'exact' で全件数を取得
+    `, { count: 'exact' })
     .eq('is_hidden', false) 
     .gte('event_date', today)
     .lte('event_date', twoWeeksLater)
     .order('event_date', { ascending: true })
-    .range(from, to); // 範囲指定を追加
+    .range(from, to);
 
   if (error) {
     console.error('Supabase Error:', error);
@@ -67,25 +67,21 @@ async function getEvents(page: number): Promise<EventsResult> {
   return { events: data as unknown as Event[], total: count };
 }
 
-// Next.js 15では searchParams は Promise になります
 export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  // URLパラメータからページ番号を取得（デフォルトは1ページ目）
   const resolvedSearchParams = await searchParams;
   const page = typeof resolvedSearchParams.page === 'string' ? parseInt(resolvedSearchParams.page) : 1;
   
-  // イベントデータと総件数を取得
   const { events, total } = await getEvents(page);
   
-  // 総ページ数を計算
   const totalEvents = total || 0;
   const totalPages = Math.ceil(totalEvents / PER_PAGE);
 
   return (
-    <main className="min-h-screen bg-slate-50 pb-20 font-sans">
+    <main className="min-h-screen bg-slate-50 font-sans flex flex-col">
       
       {/* ▼▼ ヘッダー ▼▼ */}
       <header className="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-20 flex justify-between items-center">
@@ -100,7 +96,7 @@ export default async function Home({
           </div>
         </div>
         
-        {/* ▼▼ 追加: ログインボタン ▼▼ */}
+        {/* ログインボタン */}
         <div>
           <Link 
             href="/login" 
@@ -109,11 +105,9 @@ export default async function Home({
             関係者ログイン
           </Link>
         </div>
-        {/* ▲▲ ここまで ▲▲ */}
       </header>
-      {/* ▲▲ ここまで ▲▲ */}
 
-      <div className="max-w-md mx-auto md:max-w-4xl p-4">
+      <div className="max-w-md mx-auto md:max-w-4xl p-4 flex-grow w-full">
         {events.length === 0 && (
           <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm border border-slate-200">
             <p className="text-xl text-slate-600 mb-2">
@@ -131,12 +125,11 @@ export default async function Home({
             const posterName = event.profiles?.name || '主催者不明';
             const posterIcon = event.profiles?.avatar_url;
             
-            // 最初の3件以外は遅延読み込み(lazy)にする
             const loadingType = index < 3 ? "eager" : "lazy";
 
             return (
               <Link key={event.id} href={`/events/${event.id}`} className="block group">
-                <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-slate-200">
+                <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-slate-200 h-full flex flex-col">
                   
                   {/* 画像エリア */}
                   <div className="relative aspect-[4/3] bg-slate-100">
@@ -153,6 +146,13 @@ export default async function Home({
                       </div>
                     )}
                     
+                    {/* ★修正: カテゴリ表示（文字サイズを大きく text-xs -> text-sm） */}
+                    {event.category && (
+                      <span className="absolute top-2 left-2 bg-white/95 text-teal-900 text-sm font-bold px-3 py-1 rounded shadow border border-teal-100">
+                        {event.category}
+                      </span>
+                    )}
+
                     {/* 開催までの日数 */}
                     {statusLabel && (
                       <span className="absolute top-2 right-2 bg-rose-600 text-white text-base font-bold px-3 py-1 rounded-full shadow border-2 border-white">
@@ -169,7 +169,7 @@ export default async function Home({
 
                   </div>
 
-                  <div className="p-5">
+                  <div className="p-5 flex-grow">
                     <p className="text-blue-700 font-bold text-xl mb-2">
                       📅 {formatDate(event.event_date)}
                     </p>
@@ -204,10 +204,9 @@ export default async function Home({
           })}
         </div>
 
-        {/* ▼▼ ページネーションボタン ▼▼ */}
+        {/* ページネーション */}
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-4 mt-12 mb-8">
-            {/* 前のページへ */}
             {page > 1 ? (
               <Link 
                 href={`/?page=${page - 1}`}
@@ -225,7 +224,6 @@ export default async function Home({
               {page} / {totalPages}
             </span>
 
-            {/* 次のページへ */}
             {page < totalPages ? (
               <Link 
                 href={`/?page=${page + 1}`}
@@ -240,8 +238,25 @@ export default async function Home({
             )}
           </div>
         )}
-        
       </div>
+
+      {/* フッター */}
+      <footer className="bg-gray-800 text-gray-300 py-8 mt-12 text-sm text-center">
+        <div className="max-w-4xl mx-auto px-4 flex flex-col md:flex-row justify-center items-center gap-6">
+          <Link href="/terms" className="hover:text-white hover:underline">利用規約</Link>
+          <Link href="/privacy" className="hover:text-white hover:underline">プライバシーポリシー</Link>
+          <a 
+            href="https://forms.google.com/your-form-url" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="hover:text-white hover:underline"
+          >
+            お問い合わせ
+          </a>
+        </div>
+        <p className="mt-4 text-gray-500">© 2025 浜松イベント情報</p>
+      </footer>
+
     </main>
   );
 }
