@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { formatDate, getDaysUntil } from '@/lib/utils';
+import EventList from '@/app/components/EventList'; // 作成したコンポーネントをインポート
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -108,136 +108,8 @@ export default async function Home({
       </header>
 
       <div className="max-w-md mx-auto md:max-w-4xl p-4 flex-grow w-full">
-        {events.length === 0 && (
-          <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm border border-slate-200">
-            <p className="text-xl text-slate-600 mb-2">
-              {page === 1 ? '現在、予定されているイベントはありません。' : 'このページにイベントはありません。'}
-            </p>
-            {page > 1 && (
-               <Link href="/" className="text-blue-600 hover:underline mt-4 block">先頭に戻る</Link>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
-          {events.map((event, index) => {
-            const statusLabel = getDaysUntil(event.event_date);
-            const posterName = event.profiles?.name || '主催者不明';
-            const posterIcon = event.profiles?.avatar_url;
-            
-            const loadingType = index < 3 ? "eager" : "lazy";
-
-            return (
-              <Link key={event.id} href={`/events/${event.id}`} className="block group">
-                <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-slate-200 h-full flex flex-col">
-                  
-                  {/* 画像エリア */}
-                  <div className="relative aspect-[4/3] bg-slate-100">
-                    {event.image_url ? (
-                      <img 
-                        src={event.image_url} 
-                        alt={event.title} 
-                        loading={loadingType}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-200 text-slate-400 text-lg font-bold">
-                        No Image
-                      </div>
-                    )}
-                    
-                    {/* ★修正: カテゴリ表示（文字サイズを大きく text-xs -> text-sm） */}
-                    {event.category && (
-                      <span className="absolute top-2 left-2 bg-white/95 text-teal-900 text-sm font-bold px-3 py-1 rounded shadow border border-teal-100">
-                        {event.category}
-                      </span>
-                    )}
-
-                    {/* 開催までの日数 */}
-                    {statusLabel && (
-                      <span className="absolute top-2 right-2 bg-rose-600 text-white text-base font-bold px-3 py-1 rounded-full shadow border-2 border-white">
-                        {statusLabel}
-                      </span>
-                    )}
-
-                    {/* 地区表示 */}
-                    {event.area && (
-                      <span className="absolute bottom-2 left-2 bg-sky-100 text-sky-900 text-sm font-bold px-3 py-1.5 rounded shadow-sm border border-sky-200">
-                        📍 {event.area}
-                      </span>
-                    )}
-
-                  </div>
-
-                  <div className="p-5 flex-grow">
-                    <p className="text-blue-700 font-bold text-xl mb-2">
-                      📅 {formatDate(event.event_date)}
-                    </p>
-                    
-                    <h2 className="text-2xl font-bold text-gray-800 leading-tight mb-3 line-clamp-2">
-                      {event.title}
-                    </h2>
-                    
-                    <div className="text-gray-600 text-base space-y-3">
-                      <p className="line-clamp-1 flex items-center gap-1">
-                        <span>📍</span>
-                        {event.location || '場所の記載なし'}
-                      </p>
-                      
-                      <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg mt-2 border border-slate-100">
-                        <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex-shrink-0 border border-slate-200">
-                          {posterIcon ? (
-                            <img src={posterIcon} alt={posterName} loading="lazy" className="w-full h-full object-cover" />
-                          ) : (
-                            <svg className="w-full h-full text-slate-400 p-1" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                            </svg>
-                          )}
-                        </div>
-                        <span className="font-bold text-slate-700 truncate text-base">{posterName}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* ページネーション */}
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-4 mt-12 mb-8">
-            {page > 1 ? (
-              <Link 
-                href={`/?page=${page - 1}`}
-                className="px-6 py-3 bg-white text-blue-700 border-2 border-blue-700 rounded-full font-bold shadow-sm hover:bg-blue-50 transition"
-              >
-                ← 前のページ
-              </Link>
-            ) : (
-              <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border-2 border-gray-200 rounded-full font-bold cursor-not-allowed">
-                ← 前のページ
-              </button>
-            )}
-
-            <span className="text-gray-600 font-bold">
-              {page} / {totalPages}
-            </span>
-
-            {page < totalPages ? (
-              <Link 
-                href={`/?page=${page + 1}`}
-                className="px-6 py-3 bg-blue-700 text-white rounded-full font-bold shadow-md hover:bg-blue-800 transition"
-              >
-                次のページ →
-              </Link>
-            ) : (
-              <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border-2 border-gray-200 rounded-full font-bold cursor-not-allowed">
-                次のページ →
-              </button>
-            )}
-          </div>
-        )}
+        {/* クライアントコンポーネントにデータを渡す */}
+        <EventList events={events} page={page} totalPages={totalPages} />
       </div>
 
       {/* フッター */}

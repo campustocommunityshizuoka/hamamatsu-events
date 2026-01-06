@@ -5,6 +5,7 @@ import { formatDate } from '@/lib/utils';
 import AccessibilityMenu from '@/app/components/AccessibilityMenu';
 import ViewCounter from '@/app/components/ViewCounter';
 import ReportButton from '@/app/components/ReportButton'; 
+import ShareToLine from '@/app/components/ShareToLine'; // ★追加
 
 export const runtime = 'edge';
 export const revalidate = 0;
@@ -88,7 +89,6 @@ export default async function EventDetailPage({
 
       <div className="max-w-2xl mx-auto">
         {/* 画像エリア */}
-        {/* ★修正: aspect-videoを削除し、高さを指定。object-coverに変更 */}
         <div className="w-full h-64 md:h-96 bg-gray-200">
           {event.image_url ? (
             <img 
@@ -127,9 +127,18 @@ export default async function EventDetailPage({
                     {event.category}
                   </span>
                 )}
-                <h1 className="text-3xl font-bold text-gray-900 leading-tight">
-                  {event.title}
-                </h1>
+                {/* ★修正: タイトルとLINEボタンを横並びにする */}
+                <div className="flex justify-between items-start gap-4">
+                  <h1 className="text-3xl font-bold text-gray-900 leading-tight">
+                    {event.title}
+                  </h1>
+                  {/* LINEボタン */}
+                  <ShareToLine 
+                    title={event.title} 
+                    eventId={event.id} 
+                    className="flex-shrink-0 shadow-sm px-3 py-2"
+                  />
+                </div>
               </div>
 
               <div className="space-y-6 text-xl">
@@ -144,7 +153,7 @@ export default async function EventDetailPage({
                     <div className="flex-1">
                         <p className="font-bold text-2xl mb-2">{event.location}</p>
                         <a 
-                          href={`http://googleusercontent.com/maps.google.com/?q=${encodeURIComponent(event.location || '')}`}
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location || '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
