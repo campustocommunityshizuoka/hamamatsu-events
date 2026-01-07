@@ -7,12 +7,12 @@ import Tutorial from '@/app/components/Tutorial';
 import { useAdminDashboard, Event } from '@/app/hooks/useAdminDashboard';
 
 export default function AdminDashboard() {
-  // すべてのロジックとデータをフックから取得
   const {
     events, messages, applications, reports, loading, myProfile, inviteUrl, currentUserId,
+    // ★追加: メンテナンス関連
+    isMaintenance, toggleMaintenance,
     showQrCode, setShowQrCode, showMailMenu, setShowMailMenu, showMessages, setShowMessages,
     showApplications, setShowApplications, showReports, setShowReports, runTutorial, setRunTutorial,
-    // ★修正: messagePanelRef を削除しました
     mailMenuRef, applicationPanelRef, reportPanelRef,
     handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose
   } = useAdminDashboard();
@@ -25,7 +25,6 @@ export default function AdminDashboard() {
   const pendingAppsCount = applications.length;
   const reportsCount = reports.length;
 
-  // イベントの振り分け
   const splitEventsByDate = (list: Event[]) => {
     const today = new Date().toISOString().split('T')[0];
     return {
@@ -34,11 +33,9 @@ export default function AdminDashboard() {
     };
   };
 
-  // 自分のイベント
   const myEvents = hasAdminPrivileges ? events.filter(e => e.poster_id === currentUserId) : events;
   const { upcoming: myUpcoming, past: myPast } = splitEventsByDate(myEvents);
 
-  // 管理者用：他人のイベント
   const otherEvents = hasAdminPrivileges ? events.filter(e => e.poster_id !== currentUserId) : [];
   const groupedOtherEvents: Record<string, Event[]> = {};
   otherEvents.forEach(e => {
@@ -176,6 +173,32 @@ export default function AdminDashboard() {
             <button onClick={handleLogout} className="text-xs text-red-600 underline">ログアウト</button>
           </div>
         </div>
+
+        {/* ★追加: メンテナンス切り替えスイッチ（特権管理者のみ） */}
+        {isSuperAdmin && (
+          <div className={`mb-8 p-4 rounded-xl border flex items-center justify-between shadow-sm transition-colors ${isMaintenance ? 'bg-orange-100 border-orange-300' : 'bg-white border-gray-200'}`}>
+            <div>
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                {isMaintenance ? '🚧 メンテナンスモード: ON' : '🟢 メンテナンスモード: OFF'}
+              </h3>
+              <p className="text-xs text-gray-600 mt-1">
+                {isMaintenance 
+                  ? '現在、閲覧者には「メンテナンス中」画面が表示されています。' 
+                  : '通常通り公開されています。'}
+              </p>
+            </div>
+            <button
+              onClick={toggleMaintenance}
+              className={`px-4 py-2 rounded-lg font-bold text-sm shadow ${
+                isMaintenance 
+                  ? 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50' 
+                  : 'bg-gray-800 text-white hover:bg-gray-700'
+              }`}
+            >
+              {isMaintenance ? '解除する' : 'メンテナンスにする'}
+            </button>
+          </div>
+        )}
 
         {/* QRコード表示エリア */}
         {hasAdminPrivileges && (

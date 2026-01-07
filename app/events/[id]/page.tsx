@@ -5,7 +5,8 @@ import { formatDate } from '@/lib/utils';
 import AccessibilityMenu from '@/app/components/AccessibilityMenu';
 import ViewCounter from '@/app/components/ViewCounter';
 import ReportButton from '@/app/components/ReportButton'; 
-import ShareToLine from '@/app/components/ShareToLine'; // ★追加
+import ShareToLine from '@/app/components/ShareToLine';
+import Maintenance from '@/app/components/Maintenance'; // ★追加
 
 export const runtime = 'edge';
 export const revalidate = 0;
@@ -47,15 +48,26 @@ export default async function EventDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // ★追加: メンテナンスチェック
+  const { data: setting } = await supabase
+    .from('system_settings')
+    .select('value')
+    .eq('key', 'maintenance_mode')
+    .single();
+  
+  if (setting?.value === 'true') {
+    return <Maintenance />;
+  }
+
   const { id } = await params;
   const event = await getEvent(id);
 
   if (!event) return notFound();
 
+  // ... (以下変更なし。元のコードと同じ)
   const posterName = event.profiles?.name || '主催者不明';
   const posterIcon = event.profiles?.avatar_url;
 
-  // 読み上げテキスト作成
   const spokenDate = new Date(event.event_date).toLocaleDateString('ja-JP', {
     year: 'numeric',
     month: 'long',
@@ -127,12 +139,10 @@ export default async function EventDetailPage({
                     {event.category}
                   </span>
                 )}
-                {/* ★修正: タイトルとLINEボタンを横並びにする */}
                 <div className="flex justify-between items-start gap-4">
                   <h1 className="text-3xl font-bold text-gray-900 leading-tight">
                     {event.title}
                   </h1>
-                  {/* LINEボタン */}
                   <ShareToLine 
                     title={event.title} 
                     eventId={event.id} 
@@ -197,7 +207,6 @@ export default async function EventDetailPage({
                   </p>
                 </div>
 
-                {/* 通報ボタン */}
                 <div className="mt-8 flex justify-end">
                   <ReportButton eventId={event.id} />
                 </div>

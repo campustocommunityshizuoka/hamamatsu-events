@@ -61,6 +61,7 @@ export function useAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
+  const [isMaintenance, setIsMaintenance] = useState(false); // ★追加: メンテナンス状態
   
   const [inviteUrl, setInviteUrl] = useState('');
   const [showQrCode, setShowQrCode] = useState(false);
@@ -97,6 +98,16 @@ export function useAdminDashboard() {
       
       const role = profile?.role || 'poster';
       const hasAdminPrivileges = ['admin', 'super_admin'].includes(role);
+
+      // ★追加: メンテナンス状態の取得
+      if (role === 'super_admin') {
+        const { data: setting } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'maintenance_mode')
+          .single();
+        if (setting) setIsMaintenance(setting.value === 'true');
+      }
 
       // イベント取得
       let query = supabase
@@ -175,6 +186,33 @@ export function useAdminDashboard() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/login');
+  };
+
+  // ★追加: メンテナンス切り替え
+  const toggleMaintenance = async () => {
+    if (myProfile?.role !== 'super_admin') return;
+    
+    const newValue = !isMaintenance;
+    const confirmMessage = newValue 
+      ? "【警告】メンテナンスモードをONにしますか？\n閲覧者がサイトを見られなくなります。"
+      : "メンテナンスモードを解除してサイトを公開しますか？";
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ value: String(newValue) })
+        .eq('key', 'maintenance_mode');
+
+      if (error) throw error;
+      
+      setIsMaintenance(newValue);
+      alert(newValue ? "メンテナンスモードに切り替えました。" : "メンテナンスモードを解除しました。");
+    } catch (e) {
+      console.error(e);
+      alert("設定の変更に失敗しました。");
+    }
   };
 
   const markAsRead = async (messageId: string) => {
@@ -287,7 +325,7 @@ export function useAdminDashboard() {
       setApplications(prev => prev.filter(a => a.id !== app.id));
       alert('承認メールを送信し、完了しました。');
     } catch (e) {
-      console.error("承認エラー:", e); // ★修正: エラーを表示
+      console.error("承認エラー:", e); 
       alert("自動送信失敗。手動で対応してください。");
       window.location.href = `mailto:${app.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
@@ -305,7 +343,7 @@ export function useAdminDashboard() {
       setApplications(prev => prev.filter(a => a.id !== id));
       alert('却下メールを送信し、完了しました。');
     } catch (e) {
-      console.error("却下エラー:", e); // ★修正: エラーを表示
+      console.error("却下エラー:", e); 
       alert("送信失敗。手動で対応してください。");
       window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     }
@@ -319,7 +357,7 @@ export function useAdminDashboard() {
   return {
     // Data
     events, messages, applications, reports, loading, myProfile,
-    inviteUrl, currentUserId,
+    inviteUrl, currentUserId, isMaintenance, // ★追加
     // UI State
     showQrCode, setShowQrCode,
     showMailMenu, setShowMailMenu,
@@ -330,6 +368,6 @@ export function useAdminDashboard() {
     // Refs
     mailMenuRef, messagePanelRef, applicationPanelRef, reportPanelRef,
     // Actions
-    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose
+    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose, toggleMaintenance // ★追加
   };
 }

@@ -1,12 +1,12 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import EventList from '@/app/components/EventList'; // 作成したコンポーネントをインポート
+import EventList from '@/app/components/EventList';
+import Maintenance from '@/app/components/Maintenance';
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
-// 1ページあたりの表示件数
 const PER_PAGE = 10;
 
 type Event = {
@@ -23,13 +23,22 @@ type Event = {
   } | null;
 };
 
-// 戻り値の型
 type EventsResult = {
   events: Event[];
   total: number | null;
 };
 
-// ページ番号(page)を受け取るように修正
+// ★修正: any ではなく SupabaseClient 型を指定
+async function checkMaintenance(supabase: SupabaseClient) {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('value')
+    .eq('key', 'maintenance_mode')
+    .single();
+  
+  return data?.value === 'true';
+}
+
 async function getEvents(page: number): Promise<EventsResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -43,7 +52,6 @@ async function getEvents(page: number): Promise<EventsResult> {
   const today = new Date().toISOString().split('T')[0];
   const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // ページネーションの計算
   const from = (page - 1) * PER_PAGE;
   const to = from + PER_PAGE - 1;
 
@@ -72,6 +80,16 @@ export default async function Home({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
+  // Supabaseクライアント作成とメンテナンスチェック
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const isMaintenance = await checkMaintenance(supabase);
+  if (isMaintenance) {
+    return <Maintenance />;
+  }
+
   const resolvedSearchParams = await searchParams;
   const page = typeof resolvedSearchParams.page === 'string' ? parseInt(resolvedSearchParams.page) : 1;
   
@@ -96,6 +114,7 @@ export default async function Home({
           </div>
         </div>
         
+        
         {/* ログインボタン */}
         <div>
           <Link 
@@ -106,6 +125,7 @@ export default async function Home({
           </Link>
         </div>
       </header>
+      
 
       <div className="max-w-md mx-auto md:max-w-4xl p-4 flex-grow w-full">
         {/* クライアントコンポーネントにデータを渡す */}
