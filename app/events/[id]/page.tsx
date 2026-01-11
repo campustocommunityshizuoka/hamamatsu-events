@@ -5,8 +5,6 @@ import { formatDate } from '@/lib/utils';
 import AccessibilityMenu from '@/app/components/AccessibilityMenu';
 import ViewCounter from '@/app/components/ViewCounter';
 import ReportButton from '@/app/components/ReportButton'; 
-import ShareToLine from '@/app/components/ShareToLine';
-import Maintenance from '@/app/components/Maintenance'; // ★追加
 
 export const runtime = 'edge';
 export const revalidate = 0;
@@ -48,26 +46,15 @@ export default async function EventDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // ★追加: メンテナンスチェック
-  const { data: setting } = await supabase
-    .from('system_settings')
-    .select('value')
-    .eq('key', 'maintenance_mode')
-    .single();
-  
-  if (setting?.value === 'true') {
-    return <Maintenance />;
-  }
-
   const { id } = await params;
   const event = await getEvent(id);
 
   if (!event) return notFound();
 
-  // ... (以下変更なし。元のコードと同じ)
   const posterName = event.profiles?.name || '主催者不明';
   const posterIcon = event.profiles?.avatar_url;
 
+  // 読み上げテキスト作成
   const spokenDate = new Date(event.event_date).toLocaleDateString('ja-JP', {
     year: 'numeric',
     month: 'long',
@@ -139,16 +126,9 @@ export default async function EventDetailPage({
                     {event.category}
                   </span>
                 )}
-                <div className="flex justify-between items-start gap-4">
-                  <h1 className="text-3xl font-bold text-gray-900 leading-tight">
-                    {event.title}
-                  </h1>
-                  <ShareToLine 
-                    title={event.title} 
-                    eventId={event.id} 
-                    className="flex-shrink-0 shadow-sm px-3 py-2"
-                  />
-                </div>
+                <h1 className="text-3xl font-bold text-gray-900 leading-tight">
+                  {event.title}
+                </h1>
               </div>
 
               <div className="space-y-6 text-xl">
@@ -163,7 +143,8 @@ export default async function EventDetailPage({
                     <div className="flex-1">
                         <p className="font-bold text-2xl mb-2">{event.location}</p>
                         <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location || '')}`}
+                          /* ▼▼ 修正箇所1: HTTPS化とURL修正 ▼▼ */
+                          href={`https://maps.google.com/maps?q=${encodeURIComponent(event.location || '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
@@ -181,6 +162,7 @@ export default async function EventDetailPage({
                           style={{ border: 0 }}
                           loading="lazy"
                           allowFullScreen
+                          /* ▼▼ 修正箇所2: HTTPS化とURL修正 ▼▼ */
                           src={`https://maps.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`}
                           title="Google Map"
                         ></iframe>
@@ -207,6 +189,7 @@ export default async function EventDetailPage({
                   </p>
                 </div>
 
+                {/* 通報ボタン */}
                 <div className="mt-8 flex justify-end">
                   <ReportButton eventId={event.id} />
                 </div>
