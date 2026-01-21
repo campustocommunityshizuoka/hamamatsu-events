@@ -13,6 +13,8 @@ type Event = {
   area: string | null;
   category: string | null;
   image_url: string | null;
+  // ▼▼▼ 追加: タグの型定義 ▼▼▼
+  tags: string[] | null;
   profiles: {
     name: string | null;
     avatar_url: string | null;
@@ -148,7 +150,7 @@ export default function EventList({ events, page, totalPages }: Props) {
                 {/* 2. 情報エリア */}
                 <div className="p-4 flex flex-col flex-grow">
                   
-                  {/* ★修正: 主催者アイコンを大きく（w-5 -> w-10） */}
+                  {/* 主催者アイコン */}
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-200">
                       {posterIcon ? (
@@ -157,9 +159,19 @@ export default function EventList({ events, page, totalPages }: Props) {
                         <div className="w-full h-full bg-gray-300" />
                       )}
                     </div>
-                    {/* 名前も少し大きく太く */}
                     <span className="text-sm text-gray-700 font-bold truncate">{posterName}</span>
                   </div>
+
+                  {/* ▼▼▼ 追加: ハッシュタグ表示（タイトル上、灰色） ▼▼▼ */}
+                  {event.tags && event.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-1">
+                      {event.tags.map((tag, idx) => (
+                        <span key={idx} className="text-xs font-bold text-gray-400">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   {/* タイトル */}
                   <h2 className="text-lg font-bold text-gray-900 leading-snug mb-3 line-clamp-2 group-hover:text-blue-800 transition-colors">

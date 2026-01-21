@@ -8,6 +8,8 @@ import imageCompression from 'browser-image-compression';
 
 // 設定: 1日あたりの投稿上限数
 const EVENT_POST_LIMIT = 5;
+// 設定: タグの最大数
+const MAX_TAGS = 4;
 
 // カテゴリの選択肢
 const CATEGORY_OPTIONS = [
@@ -32,6 +34,21 @@ const AREA_OPTIONS = [
   "浜名区（旧北区）",
   "天竜区（旧天竜区）"
 ];
+
+// 共通の推奨タグ
+const COMMON_TAGS = ["無料", "雨でもOK", "予約不要", "当日参加可"];
+
+// カテゴリごとの推奨タグ定義
+const CATEGORY_TAGS: Record<string, string[]> = {
+  "お祭り・マルシェ": ["食べ歩き", "地産地消", "縁日"],
+  "音楽・ライブ": ["生演奏", "野外フェス", "観覧無料"],
+  "スポーツ・運動": ["初心者歓迎", "体験会", "ヨガ"],
+  "学び・講座": ["ワークショップ", "自然観察", "歴史"],
+  "ボランティア": ["地域貢献", "ゴミ拾い", "初心者OK"],
+  "子育て・子供向け": ["ベビーカーOK", "授乳室あり", "読み聞かせ"],
+  "展示・芸術": ["写真展", "アート", "入場無料"],
+  "その他": ["交流会", "相談会"]
+};
 
 export default function CreateEventPage() {
   return (
@@ -60,6 +77,9 @@ function CreateEventForm() {
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
+  const [tags, setTags] = useState<string[]>([]); // タグの状態管理
+  const [customTagInput, setCustomTagInput] = useState(''); // カスタムタグ入力欄
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
@@ -93,7 +113,6 @@ function CreateEventForm() {
           .eq('poster_id', user.id)
           .gte('created_at', yesterday);
 
-        // error変数を明示的にチェックに使用して "unused" エラーを防ぐ
         if (!error && count !== null) {
           setRemainingPosts(Math.max(0, EVENT_POST_LIMIT - count));
         } else if (error) {
@@ -125,6 +144,8 @@ function CreateEventForm() {
         setLocation(data.location || '');
         setPhone(data.contact_phone || '');
         setDescription(data.description || '');
+        // コピー元のタグがあればセット（なければ空配列）
+        setTags(data.tags || []);
       }
     };
     fetchSourceEvent();
@@ -136,6 +157,30 @@ function CreateEventForm() {
       setImageFile(file);
       const objectUrl = URL.createObjectURL(file);
       setPreviewImageUrl(objectUrl);
+    }
+  };
+
+  // タグ追加処理
+  const addTag = (tagToAdd: string) => {
+    const trimmedTag = tagToAdd.trim();
+    if (!trimmedTag) return;
+    if (tags.length >= MAX_TAGS) return; // 上限チェック
+    if (tags.includes(trimmedTag)) return; // 重複チェック
+    setTags([...tags, trimmedTag]);
+  };
+
+  // タグ削除処理
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
+
+  // カスタムタグ追加
+  const handleCustomTagAdd = (e: React.KeyboardEvent<HTMLInputElement> | React.MouseEvent) => {
+    if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
+    e.preventDefault();
+    if (customTagInput) {
+      addTag(customTagInput);
+      setCustomTagInput('');
     }
   };
 
@@ -215,6 +260,7 @@ function CreateEventForm() {
           description,
           image_url: imageUrl,
           poster_id: user.id,
+          tags: tags, // タグを保存
         });
 
       if (insertError) throw insertError;
@@ -222,7 +268,7 @@ function CreateEventForm() {
       alert('イベントを公開しました！');
       router.push('/admin');
 
-    } catch (error: unknown) { // ★修正: unknown型にして型安全にする
+    } catch (error: unknown) {
       console.error(error);
       let message = '登録に失敗しました';
       if (error instanceof Error) {
@@ -236,6 +282,7 @@ function CreateEventForm() {
 
   const isLimitReached = !isAdmin && remainingPosts !== null && remainingPosts <= 0;
   const isSuperAdmin = userRole === 'super_admin';
+  const isTagLimitReached = tags.length >= MAX_TAGS;
 
   if (isPreview) {
     return (
@@ -263,6 +310,18 @@ function CreateEventForm() {
 
             <div>
               <p className="text-gray-500 text-sm mb-1">{date.replaceAll('-', '/')}</p>
+              
+              {/* ▼▼▼ タグ表示（イベント名の上、灰色文字） ▼▼▼ */}
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-1">
+                  {tags.map((tag, index) => (
+                    <span key={index} className="text-sm text-gray-500 font-bold">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              
               <h1 className="text-2xl font-bold text-gray-900 mb-4">{title}</h1>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
@@ -339,6 +398,85 @@ function CreateEventForm() {
               {CATEGORY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
+
+          {/* ▼▼▼ タグ設定エリア ▼▼▼ */}
+          <div className="border border-gray-200 rounded-md p-4 bg-gray-50">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              タグ設定 <span className="text-xs font-normal text-gray-500">（最大{MAX_TAGS}つまで・検索に使われます）</span>
+            </label>
+            
+            {/* 選択済みタグ */}
+            <div className="flex flex-wrap gap-2 mb-4 min-h-[30px]">
+              {tags.map((tag, idx) => (
+                <span key={idx} className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                  #{tag}
+                  <button type="button" onClick={() => removeTag(tag)} className="hover:text-blue-200 ml-1">×</button>
+                </span>
+              ))}
+              {tags.length === 0 && <span className="text-sm text-gray-400 py-1">タグが選択されていません</span>}
+            </div>
+
+            {/* カスタムタグ入力 */}
+            <div className="flex gap-2 mb-4">
+              <input 
+                type="text" 
+                value={customTagInput} 
+                onChange={(e) => setCustomTagInput(e.target.value)}
+                onKeyDown={handleCustomTagAdd}
+                placeholder="自由に入力して追加" 
+                className="flex-1 p-2 border border-gray-300 rounded text-sm"
+                disabled={isLimitReached || isTagLimitReached}
+              />
+              <button 
+                type="button" 
+                onClick={handleCustomTagAdd}
+                className="bg-gray-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-gray-700 disabled:opacity-50"
+                disabled={isLimitReached || isTagLimitReached || !customTagInput.trim()}
+              >
+                追加
+              </button>
+            </div>
+
+            {/* 推奨タグ（クリックで追加） */}
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs font-bold text-gray-500 block mb-1">よく使われるタグ:</span>
+                <div className="flex flex-wrap gap-2">
+                  {COMMON_TAGS.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => addTag(t)}
+                      disabled={isTagLimitReached || tags.includes(t)}
+                      className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {category && CATEGORY_TAGS[category] && (
+                <div>
+                  <span className="text-xs font-bold text-gray-500 block mb-1">「{category}」のおすすめ:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {CATEGORY_TAGS[category].map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => addTag(t)}
+                        disabled={isTagLimitReached || tags.includes(t)}
+                        className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* ▲▲▲ タグ設定エリア終了 ▲▲▲ */}
 
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">

@@ -30,6 +30,20 @@ const CATEGORY_OPTIONS = [
   "その他"
 ];
 
+// タグ設定
+const MAX_TAGS = 4;
+const COMMON_TAGS = ["無料", "雨でもOK", "予約不要", "当日参加可"];
+const CATEGORY_TAGS: Record<string, string[]> = {
+  "お祭り・マルシェ": ["食べ歩き", "地産地消", "縁日"],
+  "音楽・ライブ": ["生演奏", "野外フェス", "観覧無料"],
+  "スポーツ・運動": ["初心者歓迎", "体験会", "ヨガ"],
+  "学び・講座": ["ワークショップ", "自然観察", "歴史"],
+  "ボランティア": ["地域貢献", "ゴミ拾い", "初心者OK"],
+  "子育て・子供向け": ["ベビーカーOK", "授乳室あり", "読み聞かせ"],
+  "展示・芸術": ["写真展", "アート", "入場無料"],
+  "その他": ["交流会", "相談会"]
+};
+
 const IMAGE_UPDATE_LIMIT = 2;
 
 export default function EditEventPage() {
@@ -47,6 +61,10 @@ export default function EditEventPage() {
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
+  
+  // タグ関連ステート
+  const [tags, setTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
   
   const [posterId, setPosterId] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -78,6 +96,7 @@ export default function EditEventPage() {
           setCurrentImageUrl(data.image_url);
           setPosterId(data.poster_id);
           setImageUpdateCount(data.image_update_count || 0);
+          setTags(data.tags || []); // タグをセット
         }
       } catch (error) {
         console.error('データ取得エラー:', error);
@@ -121,6 +140,30 @@ export default function EditEventPage() {
     }
   };
 
+  // タグ追加処理
+  const addTag = (tagToAdd: string) => {
+    const trimmedTag = tagToAdd.trim();
+    if (!trimmedTag) return;
+    if (tags.length >= MAX_TAGS) return;
+    if (tags.includes(trimmedTag)) return;
+    setTags([...tags, trimmedTag]);
+  };
+
+  // タグ削除処理
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
+
+  // カスタムタグ追加
+  const handleCustomTagAdd = (e: React.KeyboardEvent<HTMLInputElement> | React.MouseEvent) => {
+    if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
+    e.preventDefault();
+    if (customTagInput) {
+      addTag(customTagInput);
+      setCustomTagInput('');
+    }
+  };
+
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !date || !area || !category) { alert('活動名、カテゴリ、地域、開催日は必須です'); return; }
@@ -144,7 +187,6 @@ export default function EditEventPage() {
 
     try {
       const { data: { session }, error: authError } = await supabase.auth.getSession();
-      // authError変数を使用しないとエラーになるため、条件式に含める
       if (authError || !session) throw new Error('ログインセッションが切れました。');
 
       let imageUrl = currentImageUrl;
@@ -161,7 +203,6 @@ export default function EditEventPage() {
               .from('event-images')
               .remove([oldFilePath]);
             
-            // deleteError変数を使用
             if (deleteError) console.error('旧画像削除失敗:', deleteError);
           }
         }
@@ -180,6 +221,7 @@ export default function EditEventPage() {
           image_url: imageUrl, 
           image_update_count: nextImageUpdateCount,
           updated_at: new Date().toISOString(),
+          tags: tags, // タグを更新
         })
         .eq('id', id);
 
@@ -195,7 +237,7 @@ export default function EditEventPage() {
       if (!editReason) alert('イベントを更新しました！');
       router.push('/admin');
 
-    } catch (error: unknown) { // ★修正: any型を避ける
+    } catch (error: unknown) {
       console.error(error);
       let message = '更新エラー';
       if (error instanceof Error) {
@@ -210,6 +252,7 @@ export default function EditEventPage() {
   if (loading) return <div className="p-10 text-center text-gray-500">データを読み込んでいます...</div>;
 
   const isImageLocked = !['admin', 'super_admin'].includes(myRole || '') && imageUpdateCount >= IMAGE_UPDATE_LIMIT;
+  const isTagLimitReached = tags.length >= MAX_TAGS;
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -229,6 +272,85 @@ export default function EditEventPage() {
               {CATEGORY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
+
+          {/* ▼▼▼ タグ編集エリア ▼▼▼ */}
+          <div className="border border-gray-200 rounded-md p-4 bg-gray-50">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              タグ設定 <span className="text-xs font-normal text-gray-500">（最大{MAX_TAGS}つまで）</span>
+            </label>
+            
+            {/* 選択済みタグ */}
+            <div className="flex flex-wrap gap-2 mb-4 min-h-[30px]">
+              {tags.map((tag, idx) => (
+                <span key={idx} className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                  #{tag}
+                  <button type="button" onClick={() => removeTag(tag)} className="hover:text-blue-200 ml-1">×</button>
+                </span>
+              ))}
+              {tags.length === 0 && <span className="text-sm text-gray-400 py-1">タグが選択されていません</span>}
+            </div>
+
+            {/* カスタムタグ入力 */}
+            <div className="flex gap-2 mb-4">
+              <input 
+                type="text" 
+                value={customTagInput} 
+                onChange={(e) => setCustomTagInput(e.target.value)}
+                onKeyDown={handleCustomTagAdd}
+                placeholder="自由に入力して追加" 
+                className="flex-1 p-2 border border-gray-300 rounded text-sm"
+                disabled={isTagLimitReached}
+              />
+              <button 
+                type="button" 
+                onClick={handleCustomTagAdd}
+                className="bg-gray-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-gray-700 disabled:opacity-50"
+                disabled={isTagLimitReached || !customTagInput.trim()}
+              >
+                追加
+              </button>
+            </div>
+
+            {/* 推奨タグ */}
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs font-bold text-gray-500 block mb-1">よく使われるタグ:</span>
+                <div className="flex flex-wrap gap-2">
+                  {COMMON_TAGS.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => addTag(t)}
+                      disabled={isTagLimitReached || tags.includes(t)}
+                      className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {category && CATEGORY_TAGS[category] && (
+                <div>
+                  <span className="text-xs font-bold text-gray-500 block mb-1">「{category}」のおすすめ:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {CATEGORY_TAGS[category].map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => addTag(t)}
+                        disabled={isTagLimitReached || tags.includes(t)}
+                        className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* ▲▲▲ タグ編集エリア終了 ▲▲▲ */}
 
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">地域</label>
