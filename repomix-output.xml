@@ -52,14 +52,18 @@ app/api/invite/route.ts
 app/apply/page.tsx
 app/auth/callback/route.ts
 app/components/AccessibilityMenu.tsx
+app/components/EventList.tsx
+app/components/Maintenance.tsx
 app/components/PostButton.tsx
 app/components/ReportButton.tsx
+app/components/ShareToLine.tsx
 app/components/Tutorial.tsx
 app/components/ViewCounter.tsx
 app/error.tsx
 app/events/[id]/page.tsx
 app/forgot-password/page.tsx
 app/globals.css
+app/hooks/useAdminDashboard.ts
 app/layout.tsx
 app/login/page.tsx
 app/page.tsx
@@ -89,91 +93,6 @@ tsconfig.json
 
 <files>
 This section contains the contents of the repository's files.
-
-<file path="app/components/Tutorial.tsx">
-'use client';
-
-import { useEffect } from 'react';
-import { driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
-
-type TutorialProps = {
-  run: boolean; // trueになったら起動
-  onClose: () => void; // 終了時の処理
-};
-
-export default function Tutorial({ run, onClose }: TutorialProps) {
-  useEffect(() => {
-    if (run) {
-      const driverObj = driver({
-        showProgress: true,
-        animate: true,
-        nextBtnText: '次へ',
-        prevBtnText: '戻る',
-        doneBtnText: '完了',
-        onDestroyed: onClose, // 閉じたとき（×ボタンや完了）に実行
-        steps: [
-          { 
-            element: '#tutorial-header', 
-            popover: { 
-              title: 'マイページへようこそ', 
-              description: 'ここでは投稿の管理や、運営からのお知らせを確認できます。',
-              side: "bottom", 
-              align: 'start' 
-            } 
-          },
-          { 
-            element: '#tutorial-mail', 
-            popover: { 
-              title: 'メッセージ機能', 
-              description: 'ここから「お知らせ（受信）」の確認や、運営への「メッセージ送信」ができます。未読がある場合はバッジがつきます。',
-              side: "bottom" 
-            } 
-          },
-          { 
-            element: '#tutorial-create-btn', 
-            popover: { 
-              title: 'イベント作成', 
-              description: 'ここから新しいイベントを投稿できます。',
-              side: "bottom" 
-            } 
-          },
-          // 管理者のみ表示される要素は、存在チェックが必要ですが、
-          // driver.jsは要素がない場合スキップしてくれるのでそのままで大丈夫です
-          { 
-            element: '#tutorial-report', 
-            popover: { 
-              title: '通報・報告', 
-              description: '【管理者機能】ユーザーからの通報内容はここで確認・対応できます。',
-              side: "bottom" 
-            } 
-          },
-          { 
-            element: '#tutorial-application', 
-            popover: { 
-              title: '新規申請', 
-              description: '【管理者機能】新しい団体の利用申請はここに届きます。',
-              side: "bottom" 
-            } 
-          },
-          { 
-            element: '#tutorial-profile', 
-            popover: { 
-              title: 'プロフィール設定', 
-              description: 'アイコンや名前の変更はこちらから行えます。',
-              side: "left" 
-            } 
-          },
-        ]
-      });
-
-      driverObj.drive();
-    }
-  }, [run, onClose]);
-
-  return null; // UIを描画しないコンポーネント
-}
-</file>
 
 <file path=".gitignore">
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
@@ -428,6 +347,30 @@ export default function AccessibilityMenu({ textToRead }: Props) {
 }
 </file>
 
+<file path="app/components/Maintenance.tsx">
+'use client';
+
+export default function Maintenance() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 text-center">
+      <div className="bg-white p-8 md:p-12 rounded-2xl shadow-xl max-w-lg w-full border-t-8 border-orange-500">
+        <div className="text-6xl mb-6">🚧</div>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">
+          ただいまメンテナンス中です
+        </h1>
+        <p className="text-gray-600 leading-relaxed mb-6">
+          現在、システムの調整を行っております。<br/>
+          ご不便をおかけしますが、しばらく経ってから再度アクセスしてください。
+        </p>
+        <p className="text-sm text-gray-400">
+          Administrator is working on updates.
+        </p>
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="app/components/ReportButton.tsx">
 'use client';
 
@@ -505,6 +448,97 @@ export default function ReportButton({ eventId }: { eventId: number }) {
       )}
     </>
   );
+}
+</file>
+
+<file path="app/components/Tutorial.tsx">
+'use client';
+
+import { useEffect } from 'react';
+import { driver } from 'driver.js';
+import 'driver.js/dist/driver.css';
+
+type TutorialProps = {
+  run: boolean;
+  onClose: () => void;
+  isAdmin: boolean; // ★追加: 管理者かどうか
+};
+
+export default function Tutorial({ run, onClose, isAdmin }: TutorialProps) {
+  useEffect(() => {
+    if (run) {
+      // ステップ定義
+      // 各オブジェクトの side や align に as const を付けてリテラル型にします
+      const steps = [
+        { 
+          element: '#tutorial-header', 
+          popover: { 
+            title: 'マイページへようこそ', 
+            description: 'ここでは投稿の管理や、運営からのお知らせを確認できます。',
+            side: "bottom" as const,  // ★修正
+            align: 'start' as const   // ★修正
+          } 
+        },
+        { 
+          element: '#tutorial-mail', 
+          popover: { 
+            title: 'メッセージ機能', 
+            description: 'ここから「お知らせ（受信）」の確認や、運営への「メッセージ送信」ができます。未読がある場合はバッジがつきます。',
+            side: "bottom" as const   // ★修正
+          } 
+        },
+        { 
+          element: '#tutorial-create-btn', 
+            popover: { 
+            title: 'イベント作成', 
+            description: 'ここから新しいイベントを投稿できます。',
+            side: "bottom" as const   // ★修正
+          } 
+        },
+        // ★変更: 管理者の場合のみ配列に追加する
+        ...(isAdmin ? [
+          { 
+            element: '#tutorial-report', 
+            popover: { 
+              title: '通報・報告', 
+              description: '【管理者機能】ユーザーからの通報内容はここで確認・対応できます。',
+              side: "bottom" as const // ★修正
+            } 
+          },
+          { 
+            element: '#tutorial-application', 
+            popover: { 
+              title: '新規申請', 
+              description: '【管理者機能】新しい団体の利用申請はここに届きます。',
+              side: "bottom" as const // ★修正
+            } 
+          }
+        ] : []),
+        { 
+          element: '#tutorial-profile', 
+          popover: { 
+            title: 'プロフィール設定', 
+            description: 'アイコンや名前の変更はこちらから行えます。',
+            side: "left" as const     // ★修正
+          } 
+        },
+      ];
+
+      const driverObj = driver({
+        showProgress: true,
+        animate: true,
+        nextBtnText: '次へ',
+        prevBtnText: '戻る',
+        doneBtnText: '完了',
+        onDestroyed: onClose,
+        steps: steps 
+      });
+
+      driverObj.drive();
+    }
+  }, [run, onClose, isAdmin]);
+
+  return null;
 }
 </file>
 
@@ -1843,10 +1877,712 @@ export async function GET(request: NextRequest) {
 }
 </file>
 
+<file path="app/components/EventList.tsx">
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { formatDate, getDaysUntil } from '@/lib/utils';
+import ShareToLine from '@/app/components/ShareToLine';
+
+type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  location: string | null;
+  area: string | null;
+  category: string | null;
+  image_url: string | null;
+  profiles: {
+    name: string | null;
+    avatar_url: string | null;
+  } | null;
+};
+
+type Props = {
+  events: Event[];
+  page: number;
+  totalPages: number;
+};
+
+export default function EventList({ events, page, totalPages }: Props) {
+  const [keptIds, setKeptIds] = useState<number[]>([]);
+  const [showKeptOnly, setShowKeptOnly] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('hamamatsu_event_keeps_v1');
+    if (saved) {
+      try {
+        setKeptIds(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse keeps', e);
+      }
+    }
+    setIsLoaded(true);
+  }, []);
+
+  const toggleKeep = (e: React.MouseEvent, id: number) => {
+    e.preventDefault();
+    let newIds;
+    if (keptIds.includes(id)) {
+      newIds = keptIds.filter(keepId => keepId !== id);
+    } else {
+      newIds = [...keptIds, id];
+    }
+    setKeptIds(newIds);
+    localStorage.setItem('hamamatsu_event_keeps_v1', JSON.stringify(newIds));
+  };
+
+  const displayedEvents = showKeptOnly
+    ? events.filter(event => keptIds.includes(event.id))
+    : events;
+
+  if (!isLoaded) return null;
+
+  return (
+    <div>
+      {/* タブ切り替え */}
+      <div className="flex justify-center mb-8">
+        <div className="bg-white p-1 rounded-full shadow-sm border border-gray-200 inline-flex">
+          <button
+            onClick={() => setShowKeptOnly(false)}
+            className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
+              !showKeptOnly ? 'bg-slate-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            一覧
+          </button>
+          <button
+            onClick={() => setShowKeptOnly(true)}
+            className={`px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-1 ${
+              showKeptOnly ? 'bg-pink-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            <span>♥</span> 気になる ({events.filter(e => keptIds.includes(e.id)).length})
+          </button>
+        </div>
+      </div>
+
+      {displayedEvents.length === 0 && (
+        <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+          <p className="text-lg text-gray-500">表示できるイベントがありません</p>
+          {showKeptOnly && (
+            <button onClick={() => setShowKeptOnly(false)} className="text-blue-600 underline mt-4 text-sm font-bold">
+              すべてのイベントを見る
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ▼▼ リスト表示 ▼▼ */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {displayedEvents.map((event, index) => {
+          const statusLabel = getDaysUntil(event.event_date);
+          const posterName = event.profiles?.name || '主催者不明';
+          const posterIcon = event.profiles?.avatar_url;
+          const isKept = keptIds.includes(event.id);
+          const loadingType = index < 3 ? "eager" : "lazy";
+
+          return (
+            <Link key={event.id} href={`/events/${event.id}`} className="block group">
+              <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-200 h-full flex flex-col">
+                
+                {/* 1. 画像エリア (16:9 で横長対応) */}
+                <div className="relative aspect-video bg-gray-100">
+                  {event.image_url ? (
+                    <img 
+                      src={event.image_url} 
+                      alt={event.title} 
+                      loading={loadingType}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Image</div>
+                  )}
+                  
+                  {/* === タグ配置エリア（分散させて重なり防止） === */}
+                  
+                  {/* 左上: カテゴリ */}
+                  {event.category && (
+                    <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-teal-800 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm border border-teal-100">
+                      {event.category}
+                    </span>
+                  )}
+
+                  {/* 右上: カウントダウン */}
+                  {statusLabel && (
+                    <span className="absolute top-3 right-3 bg-rose-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md border-2 border-white">
+                      {statusLabel}
+                    </span>
+                  )}
+
+                  {/* 左下: エリア */}
+                  {event.area && (
+                    <span className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm text-slate-700 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm border border-slate-100 flex items-center gap-1">
+                      📍 {event.area}
+                    </span>
+                  )}
+                </div>
+
+                {/* 2. 情報エリア */}
+                <div className="p-4 flex flex-col flex-grow">
+                  
+                  {/* ★修正: 主催者アイコンを大きく（w-5 -> w-10） */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-200">
+                      {posterIcon ? (
+                        <img src={posterIcon} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-300" />
+                      )}
+                    </div>
+                    {/* 名前も少し大きく太く */}
+                    <span className="text-sm text-gray-700 font-bold truncate">{posterName}</span>
+                  </div>
+
+                  {/* タイトル */}
+                  <h2 className="text-lg font-bold text-gray-900 leading-snug mb-3 line-clamp-2 group-hover:text-blue-800 transition-colors">
+                    {event.title}
+                  </h2>
+
+                  {/* 日付と場所（見やすいアイコン付き） */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-2 text-slate-700">
+                      <span className="text-xl text-blue-600">📅</span>
+                      <span className="font-bold text-base">{formatDate(event.event_date)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <span className="text-xl text-red-500">📍</span>
+                      <span className="text-sm truncate">{event.location || '場所の記載なし'}</span>
+                    </div>
+                  </div>
+
+                  {/* 3. アクションボタン */}
+                  <div className="mt-auto pt-3 border-t border-gray-100 flex justify-end gap-2">
+                    <ShareToLine 
+                      title={event.title} 
+                      eventId={event.id} 
+                      variant="modern" 
+                    />
+                    <button
+                      onClick={(e) => toggleKeep(e, event.id)}
+                      className={`
+                        flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors
+                        ${isKept 
+                          ? 'border-pink-500 bg-pink-50 text-pink-600' 
+                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-300'
+                        }
+                      `}
+                    >
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        viewBox="0 0 24 24" 
+                        fill={isKept ? "currentColor" : "none"} 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        className="w-5 h-5"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                      </svg>
+                      <span className="text-xs font-bold">
+                        {isKept ? '保存済' : '気になる'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* ページネーション */}
+      {!showKeptOnly && totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 mt-12 mb-8">
+          {page > 1 ? (
+            <Link 
+              href={`/?page=${page - 1}`}
+              className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-full font-bold shadow-sm hover:bg-slate-50 transition"
+            >
+              前へ
+            </Link>
+          ) : (
+            <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold cursor-not-allowed">
+              前へ
+            </button>
+          )}
+
+          <span className="text-gray-600 font-bold">
+            {page} / {totalPages}
+          </span>
+
+          {page < totalPages ? (
+            <Link 
+              href={`/?page=${page + 1}`}
+              className="px-6 py-3 bg-blue-700 text-white rounded-full font-bold shadow-md hover:bg-blue-800 transition"
+            >
+              次へ
+            </Link>
+          ) : (
+            <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold cursor-not-allowed">
+              次へ
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="app/components/ShareToLine.tsx">
+'use client';
+
+type Props = {
+  title: string;
+  eventId: number;
+  className?: string;
+  variant?: 'primary' | 'modern'; // 'icon' を廃止し 'modern' に変更
+};
+
+export default function ShareToLine({ title, eventId, className = "", variant = 'primary' }: Props) {
+  
+  const handleShare = (e: React.MouseEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation();
+
+    const origin = window.location.origin;
+    const url = `${origin}/events/${eventId}`;
+    const text = `【浜松イベント情報】\n${title}\n${url}`;
+    
+    window.open(
+      `https://line.me/R/msg/text/?${encodeURIComponent(text)}`,
+      '_blank'
+    );
+  };
+
+  // ▼▼ 一覧画面用（モダンだけど分かりやすいデザイン） ▼▼
+  if (variant === 'modern') {
+    return (
+      <button
+        onClick={handleShare}
+        className={`
+          flex items-center gap-1.5 px-3 py-1.5 rounded-full
+          border border-green-500 bg-green-50 text-green-700
+          hover:bg-green-100 transition-colors
+          ${className}
+        `}
+        title="LINEで教える"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+          <path d="M20.6 10c0-4.6-4.3-8.4-9.6-8.4S1.4 5.4 1.4 10c0 4.2 3.7 7.7 8.5 8.3.3 0 .7.1.8.3.1.2.1.5 0 .8-.1.4-.6 1.6-.7 1.9-.2.8-1 2.3.9 1.3l5.5-3.6c.3-.2.7-.2 1-.1 2.6.7 5.2-.2 5.2-4.9z"/>
+        </svg>
+        <span className="text-xs font-bold whitespace-nowrap">LINE</span>
+      </button>
+    );
+  }
+
+  // ▼▼ 詳細ページ用（今まで通りの目立つボタン） ▼▼
+  return (
+    <button
+      onClick={handleShare}
+      className={`
+        flex items-center gap-1 bg-[#06C755] text-white font-bold rounded-full 
+        transition-opacity hover:opacity-80 px-4 py-2 shadow-sm
+        ${className}
+      `}
+      title="LINEで教える"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+        <path d="M20.6 10c0-4.6-4.3-8.4-9.6-8.4S1.4 5.4 1.4 10c0 4.2 3.7 7.7 8.5 8.3.3 0 .7.1.8.3.1.2.1.5 0 .8-.1.4-.6 1.6-.7 1.9-.2.8-1 2.3.9 1.3l5.5-3.6c.3-.2.7-.2 1-.1 2.6.7 5.2-.2 5.2-4.9z"/>
+      </svg>
+      <span className="text-sm">LINEで送る</span>
+    </button>
+  );
+}
+</file>
+
 <file path="app/globals.css">
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+</file>
+
+<file path="app/hooks/useAdminDashboard.ts">
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+
+// --- 型定義 ---
+export type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  poster_id?: string;
+  view_count?: number;
+  is_hidden: boolean;
+  image_url: string | null;
+  category: string | null;
+  profiles: { name: string | null } | null;
+};
+
+export type Message = {
+  id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+  sender: { name: string | null } | null;
+};
+
+export type MyProfile = {
+  id: string;
+  role: string;
+  name: string | null;
+  avatar_url: string | null;
+};
+
+export type Application = {
+  id: number;
+  organization_name: string;
+  email: string;
+  activity_details: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+};
+
+export type Report = {
+  id: number;
+  reason: string;
+  created_at: string;
+  events: { id: number; title: string } | null;
+};
+
+const WORKER_URL = 'https://mail-sender.campustocommunityshizuoka.workers.dev/';
+
+export function useAdminDashboard() {
+  const router = useRouter();
+  
+  // State
+  const [events, setEvents] = useState<Event[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
+  const [isMaintenance, setIsMaintenance] = useState(false); // ★追加: メンテナンス状態
+  
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [showQrCode, setShowQrCode] = useState(false);
+  
+  const [showMailMenu, setShowMailMenu] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
+  const [showApplications, setShowApplications] = useState(false);
+  const [showReports, setShowReports] = useState(false);
+  const [runTutorial, setRunTutorial] = useState(false);
+
+  // Refs
+  const mailMenuRef = useRef<HTMLDivElement>(null);
+  const messagePanelRef = useRef<HTMLDivElement>(null);
+  const applicationPanelRef = useRef<HTMLDivElement>(null);
+  const reportPanelRef = useRef<HTMLDivElement>(null);
+
+  // データ取得
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      setCurrentUserId(user.id);
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, role, name, avatar_url')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile) setMyProfile(profile);
+      
+      const role = profile?.role || 'poster';
+      const hasAdminPrivileges = ['admin', 'super_admin'].includes(role);
+
+      // ★追加: メンテナンス状態の取得
+      if (role === 'super_admin') {
+        const { data: setting } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'maintenance_mode')
+          .single();
+        if (setting) setIsMaintenance(setting.value === 'true');
+      }
+
+      // イベント取得
+      let query = supabase
+        .from('events')
+        .select(`
+          id, title, event_date, poster_id, view_count, is_hidden, image_url, category,
+          profiles ( name )
+        `)
+        .order('event_date', { ascending: false });
+
+      if (!hasAdminPrivileges) {
+        query = query.eq('poster_id', user.id);
+      }
+
+      const { data: eventsData } = await query;
+      if (eventsData) setEvents(eventsData as unknown as Event[]);
+
+      // メッセージ取得
+      const { data: messagesData } = await supabase
+        .from('messages')
+        .select(`
+          id, content, created_at, is_read,
+          sender:sender_id ( name )
+        `)
+        .eq('receiver_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (messagesData) setMessages(messagesData as unknown as Message[]);
+
+      // 管理者用データ
+      if (hasAdminPrivileges) {
+        const { data: appsData } = await supabase
+          .from('applications')
+          .select('*')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+        if (appsData) setApplications(appsData as Application[]);
+
+        const { data: reportsData } = await supabase
+          .from('reports')
+          .select(`
+            id, reason, created_at,
+            events ( id, title )
+          `)
+          .order('created_at', { ascending: false });
+        if (reportsData) setReports(reportsData as unknown as Report[]);
+      }
+
+      setLoading(false);
+
+      const hasSeenTutorial = localStorage.getItem('hasSeenAdminTutorial_v1');
+      if (!hasSeenTutorial) {
+        setTimeout(() => setRunTutorial(true), 1000);
+      }
+    };
+    fetchData();
+  }, [router]);
+
+  useEffect(() => {
+    setInviteUrl('https://hamamtsu-events.shizuoka-connect.com/api/invite?code=hamamatsu2025secret');
+  }, []);
+
+  // クリック外検知
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mailMenuRef.current && !mailMenuRef.current.contains(event.target as Node)) setShowMailMenu(false);
+      if (applicationPanelRef.current && !applicationPanelRef.current.contains(event.target as Node)) setShowApplications(false);
+      if (reportPanelRef.current && !reportPanelRef.current.contains(event.target as Node)) setShowReports(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // --- アクション ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  // ★追加: メンテナンス切り替え
+  const toggleMaintenance = async () => {
+    if (myProfile?.role !== 'super_admin') return;
+    
+    const newValue = !isMaintenance;
+    const confirmMessage = newValue 
+      ? "【警告】メンテナンスモードをONにしますか？\n閲覧者がサイトを見られなくなります。"
+      : "メンテナンスモードを解除してサイトを公開しますか？";
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ value: String(newValue) })
+        .eq('key', 'maintenance_mode');
+
+      if (error) throw error;
+      
+      setIsMaintenance(newValue);
+      alert(newValue ? "メンテナンスモードに切り替えました。" : "メンテナンスモードを解除しました。");
+    } catch (e) {
+      console.error(e);
+      alert("設定の変更に失敗しました。");
+    }
+  };
+
+  const markAsRead = async (messageId: string) => {
+    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', messageId);
+    if (!error) {
+      setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, is_read: true } : msg));
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!confirm('このメッセージを削除してもよろしいですか？')) return;
+    const { error } = await supabase.from('messages').delete().eq('id', messageId);
+    if (!error) setMessages(prev => prev.filter(msg => msg.id !== messageId));
+  };
+
+  const deleteReport = async (reportId: number) => {
+    if (!confirm('この通報を「対応済み」としてリストから削除しますか？')) return;
+    const { error } = await supabase.from('reports').delete().eq('id', reportId);
+    if (!error) setReports(prev => prev.filter(r => r.id !== reportId));
+  };
+
+  const handleDelete = async (id: number, poster_id?: string, eventTitle?: string) => {
+    if (!window.confirm('本当に削除してもよろしいですか？')) return;
+    
+    let deleteReason = '';
+    const isDeletingOthersPost = poster_id && poster_id !== currentUserId;
+    const hasAdminPrivileges = ['admin', 'super_admin'].includes(myProfile?.role || '');
+
+    if (hasAdminPrivileges && isDeletingOthersPost) {
+      const input = window.prompt('削除の理由を入力してユーザーに通知しますか？\n(空欄のままOKを押すと通知を送らずに削除します)');
+      if (input === null) return;
+      deleteReason = input;
+    }
+
+    try {
+      const targetEvent = events.find(e => e.id === id);
+      if (targetEvent?.image_url) {
+        const filePath = targetEvent.image_url.split('/event-images/')[1];
+        if (filePath) await supabase.storage.from('event-images').remove([decodeURIComponent(filePath)]);
+      }
+
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) throw error;
+
+      if (deleteReason && poster_id && currentUserId) {
+        await supabase.from('messages').insert({
+          sender_id: currentUserId,
+          receiver_id: poster_id,
+          content: `【重要】あなたの投稿「${eventTitle || '不明なイベント'}」は管理者により削除されました。\n\n理由: ${deleteReason}`
+        });
+        alert("ユーザーに削除理由を通知しました。");
+      }
+
+      setEvents((prev) => prev.filter((e) => e.id !== id));
+      if (!deleteReason) alert('削除しました');
+    } catch (err) {
+      console.error(err);
+      alert('削除エラーが発生しました');
+    }
+  };
+
+  const handleToggleHidden = async (id: number, currentHiddenStatus: boolean, poster_id?: string, eventTitle?: string) => {
+    if (myProfile?.role !== 'super_admin') {
+      alert('この操作は特権管理者のみ可能です。');
+      return;
+    }
+    const newStatus = !currentHiddenStatus;
+    if (!window.confirm(`この投稿を「${newStatus ? '非表示' : '再公開'}」にしますか？`)) return;
+
+    let hideReason = '';
+    if (newStatus === true && poster_id && poster_id !== currentUserId) {
+       const input = window.prompt(`非表示にする理由を入力して通知しますか？`);
+       if (input === null) return;
+       hideReason = input;
+    }
+
+    const { error } = await supabase.from('events').update({ is_hidden: newStatus }).eq('id', id);
+    if (!error) {
+      setEvents(prev => prev.map(e => e.id === id ? { ...e, is_hidden: newStatus } : e));
+      if (hideReason && poster_id && currentUserId) {
+         await supabase.from('messages').insert({
+           sender_id: currentUserId,
+           receiver_id: poster_id,
+           content: `【管理者通知】投稿「${eventTitle}」は非表示に設定されました。\n理由: ${hideReason}`
+         });
+         alert("通知しました。");
+      }
+    }
+  };
+
+  const sendEmailViaWorker = async (toEmail: string, toName: string, subject: string, bodyText: string) => {
+    await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toEmail, toName, subject,
+        htmlContent: `<p>${toName} 様</p><p>${bodyText.replace(/\n/g, '<br/>')}</p>`
+      })
+    });
+  };
+
+  const handleApprove = async (app: Application) => {
+    if (!confirm(`「${app.organization_name}」を承認しますか？`)) return;
+    const subject = "【浜松イベント情報】利用申請の承認と招待について";
+    const body = `承認いたしました。\n\n▼登録用リンク\n${inviteUrl}\n\nよろしくお願いいたします。`;
+
+    try {
+      await sendEmailViaWorker(app.email, app.organization_name, subject, body);
+      await supabase.from('applications').delete().eq('id', app.id);
+      setApplications(prev => prev.filter(a => a.id !== app.id));
+      alert('承認メールを送信し、完了しました。');
+    } catch (e) {
+      console.error("承認エラー:", e); 
+      alert("自動送信失敗。手動で対応してください。");
+      window.location.href = `mailto:${app.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+  };
+
+  const handleReject = async (id: number, email: string, name: string) => {
+    const reason = window.prompt("却下の理由:", "活動内容が本サイトの趣旨と異なるため");
+    if (reason === null) return;
+    const subject = "【浜松イベント情報】利用申請の結果について";
+    const body = `誠に残念ながら承認を見送らせていただくこととなりました。\n理由: ${reason}`;
+
+    try {
+      await sendEmailViaWorker(email, name, subject, body);
+      await supabase.from('applications').delete().eq('id', id);
+      setApplications(prev => prev.filter(a => a.id !== id));
+      alert('却下メールを送信し、完了しました。');
+    } catch (e) {
+      console.error("却下エラー:", e); 
+      alert("送信失敗。手動で対応してください。");
+      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+  };
+
+  const handleTutorialClose = () => {
+    setRunTutorial(false);
+    localStorage.setItem('hasSeenAdminTutorial_v1', 'true');
+  };
+
+  return {
+    // Data
+    events, messages, applications, reports, loading, myProfile,
+    inviteUrl, currentUserId, isMaintenance, // ★追加
+    // UI State
+    showQrCode, setShowQrCode,
+    showMailMenu, setShowMailMenu,
+    showMessages, setShowMessages,
+    showApplications, setShowApplications,
+    showReports, setShowReports,
+    runTutorial, setRunTutorial,
+    // Refs
+    mailMenuRef, messagePanelRef, applicationPanelRef, reportPanelRef,
+    // Actions
+    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose, toggleMaintenance // ★追加
+  };
+}
 </file>
 
 <file path="app/register/page.tsx">
@@ -2113,28 +2849,6 @@ export const config = {
 };
 </file>
 
-<file path="next.config.mjs">
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // ▼▼▼ 追加: ビルド時のチェックを無視してデプロイを強制する設定 ▼▼▼
-  eslint: {
-    // ESLintのエラー（未使用変数など）があってもビルドを止めない
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    // TypeScriptの型エラー（any型など）があってもビルドを止めない
-    ignoreBuildErrors: true,
-  },
-  // ▲▲▲ ここまで ▲▲▲
-
-  images: {
-    unoptimized: true, // 既存の設定（Cloudflare等で画像最適化を使わない設定）を維持
-  },
-};
-
-export default nextConfig;
-</file>
-
 <file path="tsconfig.json">
 {
   "compilerOptions": {
@@ -2312,6 +3026,72 @@ export default function RootLayout({
     </html>
   );
 }
+</file>
+
+<file path="next.config.mjs">
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  poweredByHeader: false,
+  // ▼▼▼ 既存の設定（ビルドエラー無視など） ▼▼▼
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  images: {
+    unoptimized: true,
+  },
+  // ▲▲▲ ここまで ▲▲▲
+
+  // ▼▼▼ ★ここから追加：セキュリティヘッダーの設定 ▼▼▼
+  async headers() {
+    return [
+      {
+        // 全てのページに適用
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on'
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN' // 自分のサイト以外での埋め込みを禁止
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff' // ファイル形式の偽装を防止
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin' // リンク遷移時の情報漏洩防止
+          },
+          {
+            // CSP（コンテンツセキュリティポリシー）
+            // 許可するもの：自分自身(self)、Supabaseの画像、Googleマップ、インラインスタイルなど
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self';",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.google.com https://*.gstatic.com;", 
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
+              "img-src 'self' blob: data: https://*.supabase.co https://*.googleusercontent.com https://*.google.com;",
+              "font-src 'self' data: https://fonts.gstatic.com;",
+              "frame-src 'self' https://*.google.com https://*.googleusercontent.com;",
+              "connect-src 'self' https://*.supabase.co https://*.googleapis.com;"
+            ].join(' ').replace(/\s{2,}/g, ' ').trim()
+          }
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;
 </file>
 
 <file path="app/api/cleanup-images/route.ts">
@@ -3230,6 +4010,24 @@ export default function EditEventPage() {
 }
 </file>
 
+<file path=".github/workflows/cleanup.yml">
+name: Cleanup Old Images
+
+on:
+  schedule:
+    # 日本時間 16:10 (UTC 07:10) に実行
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Cleanup API
+        run: |
+          curl --fail -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
+</file>
+
 <file path="app/events/[id]/page.tsx">
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
@@ -3321,7 +4119,6 @@ export default async function EventDetailPage({
 
       <div className="max-w-2xl mx-auto">
         {/* 画像エリア */}
-        {/* ★修正: aspect-videoを削除し、高さを指定。object-coverに変更 */}
         <div className="w-full h-64 md:h-96 bg-gray-200">
           {event.image_url ? (
             <img 
@@ -3377,7 +4174,8 @@ export default async function EventDetailPage({
                     <div className="flex-1">
                         <p className="font-bold text-2xl mb-2">{event.location}</p>
                         <a 
-                          href={`http://googleusercontent.com/maps.google.com/?q=${encodeURIComponent(event.location || '')}`}
+                          /* ▼▼ 修正箇所1: HTTPS化とURL修正 ▼▼ */
+                          href={`https://maps.google.com/maps?q=${encodeURIComponent(event.location || '')}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
@@ -3395,6 +4193,7 @@ export default async function EventDetailPage({
                           style={{ border: 0 }}
                           loading="lazy"
                           allowFullScreen
+                          /* ▼▼ 修正箇所2: HTTPS化とURL修正 ▼▼ */
                           src={`https://maps.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`}
                           title="Google Map"
                         ></iframe>
@@ -3430,1098 +4229,6 @@ export default async function EventDetailPage({
         </div>
       </div>
     </main>
-  );
-}
-</file>
-
-<file path=".github/workflows/cleanup.yml">
-name: Cleanup Old Images
-
-on:
-  schedule:
-    # 日本時間 16:10 (UTC 07:10) に実行
-    - cron: '0 10 * * *'
-  workflow_dispatch:
-
-jobs:
-  cleanup:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Call Cleanup API
-        run: |
-          curl --fail -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
-</file>
-
-<file path="app/admin/page.tsx">
-'use client';
-
-import { useEffect, useState, useRef } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { formatDate } from '@/lib/utils';
-import { QRCodeSVG } from 'qrcode.react';
-import Tutorial from '@/app/components/Tutorial'; // Import Tutorial
-
-// --- WorkerのURL定義 ---
-const WORKER_URL = 'https://mail-sender.campustocommunityshizuoka.workers.dev/';
-
-// --- 型定義 ---
-
-type Event = {
-  id: number;
-  title: string;
-  event_date: string;
-  poster_id?: string;
-  view_count?: number;
-  is_hidden: boolean;
-  image_url: string | null;
-  category: string | null;
-  profiles: {
-    name: string | null;
-  } | null;
-};
-
-type Message = {
-  id: string;
-  content: string;
-  created_at: string;
-  is_read: boolean;
-  sender: {
-    name: string | null;
-  } | null;
-};
-
-type MyProfile = {
-  id: string;
-  role: string;
-  name: string | null;
-  avatar_url: string | null;
-};
-
-type Application = {
-  id: number;
-  organization_name: string;
-  email: string;
-  activity_details: string;
-  status: 'pending' | 'approved' | 'rejected';
-  created_at: string;
-};
-
-type Report = {
-  id: number;
-  reason: string;
-  created_at: string;
-  events: {
-    id: number;
-    title: string;
-  } | null;
-};
-
-// --- コンポーネント本体 ---
-
-export default function AdminDashboard() {
-  const router = useRouter();
-  
-  // State定義
-  const [events, setEvents] = useState<Event[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
-  
-  // UI制御用State
-  const [inviteUrl, setInviteUrl] = useState('');
-  const [showQrCode, setShowQrCode] = useState(false);
-  
-  // パネル表示フラグ
-  const [showMailMenu, setShowMailMenu] = useState(false);
-  const [showMessages, setShowMessages] = useState(false);
-  const [showApplications, setShowApplications] = useState(false);
-  const [showReports, setShowReports] = useState(false);
-
-  // Tutorial State
-  const [runTutorial, setRunTutorial] = useState(false);
-  
-  const mailMenuRef = useRef<HTMLDivElement>(null);
-  const messagePanelRef = useRef<HTMLDivElement>(null);
-  const applicationPanelRef = useRef<HTMLDivElement>(null);
-  const reportPanelRef = useRef<HTMLDivElement>(null);
-
-  // データ取得
-  useEffect(() => {
-    const fetchData = async () => {
-      // 1. ユーザー確認
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      
-      setCurrentUserId(user.id);
-
-      // 2. プロフィール取得
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, role, name, avatar_url')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile) {
-        setMyProfile(profile);
-      }
-      
-      const role = profile?.role || 'poster';
-      const hasAdminPrivileges = ['admin', 'super_admin'].includes(role);
-
-      // 3. イベントデータ取得
-      let query = supabase
-        .from('events')
-        .select(`
-          id, title, event_date, poster_id, view_count, is_hidden, image_url, category,
-          profiles ( name )
-        `)
-        .order('event_date', { ascending: false });
-
-      if (!hasAdminPrivileges) {
-        query = query.eq('poster_id', user.id);
-      }
-
-      const { data: eventsData, error: eventsError } = await query;
-      if (eventsError) console.error("データ取得エラー:", eventsError);
-      if (eventsData) setEvents(eventsData as unknown as Event[]);
-
-      // 4. メッセージ取得
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('messages')
-        .select(`
-          id, content, created_at, is_read,
-          sender:sender_id ( name )
-        `)
-        .eq('receiver_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (messagesError) console.error("メッセージ取得エラー:", messagesError);
-      if (messagesData) setMessages(messagesData as unknown as Message[]);
-
-      // 5. 管理者用データ取得
-      if (hasAdminPrivileges) {
-        const { data: appsData } = await supabase
-          .from('applications')
-          .select('*')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false });
-        
-        if (appsData) setApplications(appsData as Application[]);
-
-        const { data: reportsData } = await supabase
-          .from('reports')
-          .select(`
-            id, reason, created_at,
-            events ( id, title )
-          `)
-          .order('created_at', { ascending: false });
-
-        if (reportsData) setReports(reportsData as unknown as Report[]);
-      }
-
-      setLoading(false);
-
-      // Check local storage for tutorial
-      const hasSeenTutorial = localStorage.getItem('hasSeenAdminTutorial_v1');
-      if (!hasSeenTutorial) {
-        setTimeout(() => setRunTutorial(true), 1000);
-      }
-    };
-
-    fetchData();
-  }, [router]);
-
-  useEffect(() => {
-    setInviteUrl('https://hamamtsu-events.shizuoka-connect.com/api/invite?code=hamamatsu2025secret');
-  }, []);
-
-  // クリック外検知
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (mailMenuRef.current && !mailMenuRef.current.contains(event.target as Node)) {
-        setShowMailMenu(false);
-      }
-      if (messagePanelRef.current && !messagePanelRef.current.contains(event.target as Node)) {
-        // setShowMessages(false);
-      }
-      if (applicationPanelRef.current && !applicationPanelRef.current.contains(event.target as Node)) {
-        setShowApplications(false);
-      }
-      if (reportPanelRef.current && !reportPanelRef.current.contains(event.target as Node)) {
-        setShowReports(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // --- アクション関数群 ---
-
-  const markAsRead = async (messageId: string) => {
-    try {
-      const { error } = await supabase
-        .from('messages')
-        .update({ is_read: true })
-        .eq('id', messageId);
-
-      if (error) throw error;
-
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId ? { ...msg, is_read: true } : msg
-      ));
-    } catch (err) {
-      console.error("既読更新エラー:", err);
-    }
-  };
-
-  const deleteMessage = async (messageId: string) => {
-    if (!confirm('このメッセージを削除してもよろしいですか？')) return;
-    try {
-      const { error } = await supabase
-        .from('messages')
-        .delete()
-        .eq('id', messageId);
-      if (error) throw error;
-      setMessages(prev => prev.filter(msg => msg.id !== messageId));
-    } catch (err) {
-      console.error("削除エラー:", err);
-      alert('メッセージの削除に失敗しました。');
-    }
-  };
-
-  const deleteReport = async (reportId: number) => {
-    if (!confirm('この通報を「対応済み」としてリストから削除しますか？')) return;
-    try {
-      const { error } = await supabase
-        .from('reports')
-        .delete()
-        .eq('id', reportId);
-      
-      if (error) throw error;
-      
-      setReports(prev => prev.filter(r => r.id !== reportId));
-    } catch (err) {
-      console.error("通報削除エラー:", err);
-      alert('削除に失敗しました');
-    }
-  };
-
-  const getFilePathFromUrl = (url: string) => {
-    try {
-      const parts = url.split('/event-images/');
-      if (parts.length > 1) {
-        return decodeURIComponent(parts[1]);
-      }
-      return null;
-    } catch (e) {
-      console.error('パス解析エラー', e);
-      return null;
-    }
-  };
-
-  const handleDelete = async (id: number, poster_id?: string, eventTitle?: string) => {
-    if (!window.confirm('本当に削除してもよろしいですか？')) return;
-
-    let deleteReason = '';
-    const isDeletingOthersPost = poster_id && poster_id !== currentUserId;
-    const hasAdminPrivileges = ['admin', 'super_admin'].includes(myProfile?.role || '');
-
-    if (hasAdminPrivileges && isDeletingOthersPost) {
-      const input = window.prompt('削除の理由を入力してユーザーに通知しますか？\n(空欄のままOKを押すと通知を送らずに削除します)');
-      if (input === null) return;
-      deleteReason = input;
-    }
-
-    try {
-      const targetEvent = events.find(e => e.id === id);
-      if (targetEvent?.image_url) {
-        const filePath = getFilePathFromUrl(targetEvent.image_url);
-        if (filePath) {
-          const { error: storageError } = await supabase.storage
-            .from('event-images')
-            .remove([filePath]);
-          if (storageError) console.error('画像削除エラー:', storageError);
-        }
-      }
-
-      const { error } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error("削除エラー:", error);
-        alert('削除できませんでした。');
-        return; 
-      }
-
-      if (deleteReason && poster_id && currentUserId) {
-        await supabase.from('messages').insert({
-          sender_id: currentUserId,
-          receiver_id: poster_id,
-          content: `【重要】あなたの投稿「${eventTitle || '不明なイベント'}」は管理者により削除されました。\n\n理由: ${deleteReason}`
-        });
-        alert("ユーザーに削除理由を通知しました。");
-      }
-
-      setEvents((prev) => prev.filter((e) => e.id !== id));
-      if (!deleteReason) alert('削除しました');
-
-    } catch (err) {
-      console.error("予期せぬエラー:", err);
-      alert('システムエラーが発生しました。');
-    }
-  };
-
-  const handleToggleHidden = async (id: number, currentHiddenStatus: boolean, poster_id?: string, eventTitle?: string) => {
-    if (myProfile?.role !== 'super_admin') {
-      alert('この操作は特権管理者のみ可能です。');
-      return;
-    }
-
-    const newStatus = !currentHiddenStatus;
-    const actionName = newStatus ? '非表示' : '再公開';
-
-    if (!window.confirm(`この投稿を「${actionName}」にしますか？`)) return;
-
-    let hideReason = '';
-    const isOthersPost = poster_id && poster_id !== currentUserId;
-    
-    if (newStatus === true && isOthersPost) {
-       const input = window.prompt(`非表示にする理由を入力してユーザーに通知しますか？\n(空欄のままだと通知を送らずに非表示にします)`);
-       if (input === null) return;
-       hideReason = input;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('events')
-        .update({ is_hidden: newStatus })
-        .eq('id', id);
-
-      if (error) {
-        alert(`${actionName}に設定できませんでした。`);
-        return;
-      }
-
-      if (hideReason && poster_id && currentUserId) {
-         await supabase.from('messages').insert({
-           sender_id: currentUserId,
-           receiver_id: poster_id,
-           content: `【管理者通知】あなたの投稿「${eventTitle || '不明なイベント'}」は管理者により非表示に設定されました。\n\n理由: ${hideReason}`
-         });
-         alert("ユーザーに理由を通知しました。");
-      }
-
-      setEvents((prev) => prev.map((e) => e.id === id ? { ...e, is_hidden: newStatus } : e));
-      
-    } catch (err) {
-      console.error(err);
-      alert('システムエラーが発生しました。');
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
-
-  const groupEventsByPoster = (targetEvents: Event[]) => {
-    const grouped: Record<string, Event[]> = {};
-    targetEvents.forEach((event) => {
-      const posterName = event.profiles?.name || '不明な団体';
-      if (!grouped[posterName]) {
-        grouped[posterName] = [];
-      }
-      grouped[posterName].push(event);
-    });
-    return grouped;
-  };
-
-  const sendEmailViaWorker = async (toEmail: string, toName: string, subject: string, bodyText: string) => {
-    const htmlContent = `
-      <p>${toName} 様</p>
-      <p>${bodyText.replace(/\n/g, '<br/>')}</p>
-    `;
-
-    const response = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        toEmail,
-        toName,
-        subject,
-        htmlContent
-      })
-    });
-
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || '送信APIエラー');
-    }
-  };
-
-  const handleApprove = async (app: Application) => {
-    if (!confirm(`「${app.organization_name}」を承認しますか？`)) return;
-
-    const subject = "【浜松イベント情報】利用申請の承認と招待について";
-    const body = 
-      `浜松イベント情報への利用申請ありがとうございます。\n` +
-      `内容を確認し、アカウント作成を承認いたしました。\n\n` +
-      `以下のリンクより、24時間以内にアカウント登録をお願いいたします。\n\n` +
-      `▼登録用リンク\n` +
-      `${inviteUrl}\n\n` +
-      `よろしくお願いいたします。`;
-
-    let autoSendSuccess = false;
-
-    try {
-      await sendEmailViaWorker(app.email, app.organization_name, subject, body);
-      autoSendSuccess = true;
-    } catch (e) {
-      console.error("自動送信失敗:", e);
-      alert("自動送信に失敗しました。メールソフトを起動しますので、手動で送信してください。");
-      const mailtoLink = `mailto:${app.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.location.href = mailtoLink;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('applications')
-        .delete()
-        .eq('id', app.id);
-
-      if (error) throw error;
-
-      setApplications(prev => prev.filter(a => a.id !== app.id));
-      
-      if (autoSendSuccess) {
-        alert('承認メールを自動送信し、処理を完了しました。');
-      } 
-    } catch (err) {
-      console.error(err);
-      alert('データベースからの削除に失敗しました（メール処理は実行されましたが、データが残っています）');
-    }
-  };
-
-  const handleReject = async (id: number, email: string, name: string) => {
-    const reason = window.prompt("却下の理由を入力してください（相手へのメールに記載されます）:\n※空欄でキャンセル", "活動内容が本サイトの趣旨と異なるため");
-    if (reason === null) return;
-
-    const subject = "【浜松イベント情報】利用申請の結果について";
-    const body = 
-      `浜松イベント情報への利用申請ありがとうございます。\n` +
-      `内容を確認いたしましたが、誠に残念ながら今回は以下の理由により承認を見送らせていただくこととなりました。\n\n` +
-      `理由: ${reason}\n\n` +
-      `何卒ご了承くださいますようお願い申し上げます。`;
-
-    let autoSendSuccess = false;
-
-    try {
-      await sendEmailViaWorker(email, name, subject, body);
-      autoSendSuccess = true;
-    } catch (e) {
-      console.error("自動送信失敗:", e);
-      alert("自動送信に失敗しました。メールソフトを起動しますので、手動で送信してください。");
-      const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.location.href = mailtoLink;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('applications')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      setApplications(prev => prev.filter(a => a.id !== id));
-      
-      if (autoSendSuccess) {
-        alert('却下メールを自動送信し、処理を完了しました。');
-      }
-
-    } catch (err) {
-      console.error("却下処理エラー:", err);
-      alert('データベースからの削除に失敗しました');
-    }
-  };
-
-  const splitEventsByDate = (list: Event[]) => {
-    const today = new Date().toISOString().split('T')[0];
-    const upcoming = list.filter(e => e.event_date >= today);
-    const past = list.filter(e => e.event_date < today);
-    return { upcoming, past };
-  };
-
-  const handleTutorialClose = () => {
-    setRunTutorial(false);
-    localStorage.setItem('hasSeenAdminTutorial_v1', 'true');
-  };
-
-  if (loading) return <div className="p-10 text-center">読み込み中...</div>;
-
-  const hasAdminPrivileges = ['admin', 'super_admin'].includes(myProfile?.role || '');
-  const isSuperAdmin = myProfile?.role === 'super_admin';
-  const unreadCount = messages.filter(m => !m.is_read).length;
-  const pendingAppsCount = applications.length;
-  const reportsCount = reports.length;
-
-  const myEvents = hasAdminPrivileges ? events.filter(e => e.poster_id === currentUserId) : [];
-  const otherEvents = hasAdminPrivileges ? events.filter(e => e.poster_id !== currentUserId) : [];
-  const groupedOtherEvents = groupEventsByPoster(otherEvents);
-  
-  const { upcoming: myUpcoming, past: myPast } = splitEventsByDate(hasAdminPrivileges ? myEvents : events);
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      {/* Tutorial */}
-      <Tutorial run={runTutorial} onClose={handleTutorialClose} />
-
-      <div className="max-w-4xl mx-auto">
-        
-        {/* ヘッダーエリア */}
-        <div 
-          id="tutorial-header" 
-          className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-4 md:p-6 rounded-xl shadow-sm relative z-20"
-        >
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
-              {myProfile?.avatar_url ? (
-                <img src={myProfile.avatar_url} alt="My Icon" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-xs md:text-base">No Img</div>
-              )}
-            </div>
-            
-            <div className="flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl md:text-2xl font-bold">マイページ</h1>
-                <Link href="/" className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 flex items-center gap-1 border border-blue-200">
-                  <span>🏠</span> ホーム
-                </Link>
-                <button onClick={() => setRunTutorial(true)} className="text-xs text-gray-400 underline hover:text-gray-600">
-                  ? ヘルプ
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
-                <p className="text-gray-600 font-medium text-sm md:text-base">
-                  {myProfile?.name || '名無し'} さん
-                </p>
-                {hasAdminPrivileges && (
-                  <span className={`text-xs px-2 py-1 rounded ${myProfile?.role === 'super_admin' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-600'}`}>
-                    {myProfile?.role === 'super_admin' ? '特権管理者' : '全体管理者'}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto justify-end">
-            
-            {hasAdminPrivileges && (
-              <>
-                {/* 通報ボタン */}
-                <div className="relative" ref={reportPanelRef} id="tutorial-report"> 
-                  <button
-                    onClick={() => setShowReports(!showReports)}
-                    className="relative px-3 py-2 text-red-700 font-bold hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 border border-red-200 text-sm"
-                    title="通報一覧"
-                  >
-                    <span>⚠️ 通報</span>
-                    {reportsCount > 0 && (
-                      <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">
-                        {reportsCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* 通報リストポップアップ */}
-                  {showReports && (
-                    <>
-                      <div 
-                        className="fixed inset-0 bg-black/20 z-40 md:hidden"
-                        onClick={() => setShowReports(false)}
-                      />
-                      <div className="fixed top-20 left-4 right-4 z-50 md:absolute md:inset-auto md:right-0 md:top-full md:w-96 bg-white rounded-lg shadow-xl border border-red-200 overflow-hidden flex flex-col max-h-[70vh]">
-                        <div className="bg-red-50 px-4 py-3 border-b border-red-200 flex justify-between items-center flex-shrink-0">
-                          <h3 className="font-bold text-red-800 text-sm">不適切な投稿の報告 ({reportsCount})</h3>
-                          <button onClick={() => setShowReports(false)} className="md:hidden text-gray-500">✕</button>
-                        </div>
-                        <div className="overflow-y-auto flex-grow">
-                          {reports.length === 0 ? (
-                            <div className="p-4 text-center text-gray-500 text-sm">現在、通報はありません</div>
-                          ) : (
-                            <div className="divide-y divide-gray-100">
-                              {reports.map((report) => (
-                                <div key={report.id} className="p-4 hover:bg-gray-50 transition-colors">
-                                  <div className="mb-2">
-                                    <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold">Reason</span>
-                                    <p className="text-sm font-bold text-gray-800 mt-1 whitespace-pre-wrap">{report.reason}</p>
-                                  </div>
-                                  
-                                  {report.events ? (
-                                    <div className="bg-gray-100 p-2 rounded mb-2 text-xs">
-                                      <p className="text-gray-500">対象イベント:</p>
-                                      <Link href={`/events/${report.events.id}`} target="_blank" className="text-blue-600 font-bold hover:underline truncate block">
-                                        {report.events.title}
-                                      </Link>
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs text-gray-400 mb-2">※対象イベントは既に削除されました</p>
-                                  )}
-
-                                  <div className="flex justify-between items-center mt-2">
-                                    <span className="text-xs text-gray-400">{formatDate(report.created_at)}</span>
-                                    <button 
-                                      onClick={() => deleteReport(report.id)}
-                                      className="text-xs text-gray-500 hover:text-red-600 underline"
-                                    >
-                                      対応済みとして削除
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* 申請ボックスボタン */}
-                <div className="relative" ref={applicationPanelRef} id="tutorial-application">
-                  <button
-                    onClick={() => setShowApplications(!showApplications)}
-                    className="relative px-3 py-2 text-orange-700 font-bold hover:bg-orange-50 rounded-lg transition-colors flex items-center gap-2 border border-orange-200 text-sm"
-                    title="申請ボックス"
-                  >
-                    <span>新規申請</span>
-                    {pendingAppsCount > 0 && (
-                      <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">
-                        {pendingAppsCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* 申請リストポップアップ */}
-                  {showApplications && (
-                    <>
-                      <div 
-                        className="fixed inset-0 bg-black/20 z-40 md:hidden"
-                        onClick={() => setShowApplications(false)}
-                      />
-                      <div className="fixed top-20 left-4 right-4 z-50 md:absolute md:inset-auto md:right-0 md:top-full md:w-96 bg-white rounded-lg shadow-xl border border-orange-200 overflow-hidden flex flex-col max-h-[70vh]">
-                        <div className="bg-orange-50 px-4 py-3 border-b border-orange-200 flex justify-between items-center flex-shrink-0">
-                          <h3 className="font-bold text-orange-800 text-sm">新規利用申請 ({pendingAppsCount})</h3>
-                          <button onClick={() => setShowApplications(false)} className="md:hidden text-gray-500">✕</button>
-                        </div>
-                        <div className="overflow-y-auto flex-grow">
-                          {applications.length === 0 ? (
-                            <div className="p-4 text-center text-gray-500 text-sm">現在、未対応の申請はありません</div>
-                          ) : (
-                            <div className="divide-y divide-gray-100">
-                              {applications.map((app) => (
-                                <div key={app.id} className="p-4 hover:bg-gray-50 transition-colors">
-                                  <div className="mb-2">
-                                    <h4 className="font-bold text-sm text-gray-800">{app.organization_name}</h4>
-                                    <p className="text-xs text-gray-500 font-mono mb-1">{app.email}</p>
-                                    <p className="text-xs text-gray-400">{formatDate(app.created_at)}</p>
-                                  </div>
-                                  <div className="bg-gray-50 p-2 rounded text-xs text-gray-700 mb-3 whitespace-pre-wrap">
-                                    {app.activity_details}
-                                  </div>
-                                  <div className="flex gap-2 justify-end">
-                                    <button 
-                                      onClick={() => handleReject(app.id, app.email, app.organization_name)}
-                                      className="px-3 py-1 text-xs text-gray-500 hover:bg-gray-200 rounded border border-gray-300"
-                                    >
-                                      却下
-                                    </button>
-                                    <button 
-                                      onClick={() => handleApprove(app)}
-                                      className="px-3 py-1 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded"
-                                    >
-                                      承認・招待
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* メールメニュー */}
-            <div className="relative" ref={mailMenuRef} id="tutorial-mail">
-              <button 
-                onClick={() => setShowMailMenu(!showMailMenu)}
-                className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors flex items-center gap-1"
-                title="メール"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="20" height="16" x="2" y="4" rx="2" />
-                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-                </svg>
-                {unreadCount > 0 && (
-                  <span className="absolute top-0 right-0 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full min-w-[18px] h-[18px]">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {/* メール選択メニュー */}
-              {showMailMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-50 animate-fadeIn">
-                  <div className="p-1">
-                    <button
-                      onClick={() => {
-                        setShowMailMenu(false);
-                        setShowMessages(true); // 受信箱を開く
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded flex justify-between items-center"
-                    >
-                      <span>📥 お知らせ (受信)</span>
-                      {unreadCount > 0 && <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">{unreadCount}</span>}
-                    </button>
-                    <Link
-                      href="/admin/messages"
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded block"
-                      onClick={() => setShowMailMenu(false)}
-                    >
-                      📤 メッセージ作成
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {/* 受信箱パネル */}
-              {showMessages && (
-                <>
-                  <div 
-                    className="fixed inset-0 bg-black/20 z-40 md:hidden"
-                    onClick={() => setShowMessages(false)}
-                  />
-                  <div className="fixed top-20 left-4 right-4 z-50 md:absolute md:inset-auto md:right-0 md:top-full md:w-96 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden flex flex-col max-h-[70vh]">
-                    {/* 中身は変更なし */}
-                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-                      <h3 className="font-bold text-gray-700 text-sm">お知らせ ({messages.length})</h3>
-                      <div className="flex items-center gap-2">
-                        {unreadCount > 0 && <span className="text-xs text-red-600 font-bold">{unreadCount}件の未読</span>}
-                        <button onClick={() => setShowMessages(false)} className="md:hidden text-gray-500 ml-2">✕</button>
-                      </div>
-                    </div>
-                    <div className="overflow-y-auto flex-grow">
-                      {messages.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">お知らせはありません</div>
-                      ) : (
-                        <div className="divide-y divide-gray-100">
-                          {messages.map((msg) => (
-                            <div key={msg.id} className={`p-4 hover:bg-gray-50 transition-colors ${!msg.is_read ? 'bg-yellow-50' : ''}`}>
-                              <div className="flex justify-between items-start mb-1">
-                                <span className="font-bold text-xs text-gray-600">{msg.sender?.name || '管理者'}</span>
-                                <span className="text-xs text-gray-400">{formatDate(msg.created_at)}</span>
-                              </div>
-                              <p className="text-sm text-gray-800 whitespace-pre-wrap mb-3 break-words">{msg.content}</p>
-                              <div className="flex justify-end items-center gap-3">
-                                <button onClick={() => deleteMessage(msg.id)} className="text-gray-400 hover:text-red-600 transition-colors" title="削除">
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                </button>
-                                {!msg.is_read && (
-                                  <button onClick={() => markAsRead(msg.id)} className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                    既読にする
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <Link href="/admin/profile" id="tutorial-profile" className="text-sm font-bold text-gray-600 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 bg-white">
-              <span className="md:hidden">⚙</span>
-              <span className="hidden md:inline">⚙ プロフィール</span>
-            </Link>
-            
-            <button onClick={handleLogout} className="text-xs md:text-sm text-red-600 underline ml-2 whitespace-nowrap">
-              ログアウト
-            </button>
-          </div>
-        </div>
-
-        {/* ... (QRコード等は変更なし) ... */}
-        {hasAdminPrivileges && (
-          <div className="mb-8">
-             <button
-               onClick={() => setShowQrCode(!showQrCode)}
-               className="w-full md:w-auto flex justify-center items-center gap-2 text-teal-700 font-bold border border-teal-300 bg-teal-50 px-4 py-3 rounded-lg hover:bg-teal-100 transition shadow-sm"
-             >
-               <span className="text-xl">🎟️</span>
-               {showQrCode ? '招待QRコードを隠す' : '手動招待用QRコードを表示'}
-             </button>
-             {showQrCode && (
-               <div className="mt-4 bg-white p-6 rounded-xl shadow-md border border-teal-200 flex flex-col md:flex-row items-center gap-6 animate-fadeIn">
-                 <div className="bg-white p-2 border border-gray-200 rounded-lg flex justify-center">
-                   {inviteUrl && <QRCodeSVG value={inviteUrl} size={150} />}
-                 </div>
-                 <div className="flex-1">
-                   <h3 className="font-bold text-lg text-teal-800 mb-2">手動招待用QRコード</h3>
-                   <p className="text-sm text-gray-600 mb-3">
-                     基本は上の「新規申請」ボタンから招待を送りますが、<br/>
-                     対面などで直接招待する場合にこのコードを使用してください。
-                   </p>
-                   <div className="bg-gray-100 p-3 rounded-lg text-xs text-gray-500 break-all font-mono border border-gray-200">
-                     {inviteUrl}
-                   </div>
-                 </div>
-               </div>
-             )}
-          </div>
-        )}
-
-        <div className="mb-6">
-          <Link href="/admin/create" id="tutorial-create-btn" className="block w-full md:w-auto text-center bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-700">
-            + 新しいイベントを作る
-          </Link>
-        </div>
-
-        {/* --- イベントリスト表示 --- */}
-        {hasAdminPrivileges ? (
-          <div className="space-y-10">
-            {/* 自分の投稿 */}
-            <div className="bg-white rounded-lg shadow overflow-hidden border-2 border-blue-100">
-              <div className="bg-blue-50 px-4 py-3 border-b border-blue-200">
-                <h3 className="font-bold text-blue-800 text-sm md:text-base">📌 あなた（{myProfile?.role === 'super_admin' ? '特権管理者' : '全体管理者'}）の投稿</h3>
-              </div>
-              
-              <EventTable 
-                events={myUpcoming} 
-                onDelete={handleDelete} 
-                onToggleHidden={handleToggleHidden} 
-                isSuperAdmin={isSuperAdmin} 
-                emptyMessage="開催予定の投稿はありません。" 
-              />
-              
-              {myPast.length > 0 && (
-                <details className="group border-t border-gray-100">
-                  <summary className="cursor-pointer bg-gray-50 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-100 flex items-center gap-2">
-                    <span className="group-open:rotate-90 transition-transform">▶</span>
-                    終了したイベントを表示 ({myPast.length})
-                  </summary>
-                  <EventTable 
-                    events={myPast} 
-                    onDelete={handleDelete} 
-                    onToggleHidden={handleToggleHidden} 
-                    isSuperAdmin={isSuperAdmin} 
-                  />
-                </details>
-              )}
-            </div>
-
-            {/* 他の団体の投稿 */}
-            {Object.keys(groupedOtherEvents).length > 0 && (
-              <div className="space-y-6">
-                <h2 className="text-lg md:text-xl font-bold text-gray-700 pl-2 border-l-4 border-gray-400">他の団体の投稿</h2>
-                {Object.entries(groupedOtherEvents).map(([posterName, groupEvents]) => {
-                  const { upcoming: groupUpcoming, past: groupPast } = splitEventsByDate(groupEvents);
-                  
-                  return (
-                    <div key={posterName} className="bg-white rounded-lg shadow overflow-hidden">
-                      <div className="bg-gray-100 px-4 py-3 border-b border-gray-200">
-                        <h3 className="font-bold text-gray-700 text-sm md:text-base">📂 {posterName}</h3>
-                      </div>
-                      
-                      <EventTable 
-                        events={groupUpcoming} 
-                        onDelete={handleDelete} 
-                        onToggleHidden={handleToggleHidden} 
-                        isSuperAdmin={isSuperAdmin}
-                        emptyMessage="開催予定の投稿はありません。"
-                      />
-
-                      {groupPast.length > 0 && (
-                         <details className="group border-t border-gray-100">
-                           <summary className="cursor-pointer bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 flex items-center gap-2">
-                             <span className="group-open:rotate-90 transition-transform">▶</span>
-                             終了したイベント ({groupPast.length})
-                           </summary>
-                           <EventTable 
-                             events={groupPast} 
-                             onDelete={handleDelete} 
-                             onToggleHidden={handleToggleHidden} 
-                             isSuperAdmin={isSuperAdmin} 
-                           />
-                         </details>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : (
-          // 一般投稿者
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="bg-teal-50 px-4 py-3 border-b border-teal-100">
-              <h3 className="font-bold text-teal-800 text-sm md:text-base">開催予定・開催中のイベント</h3>
-            </div>
-            <EventTable 
-              events={myUpcoming} 
-              onDelete={handleDelete} 
-              onToggleHidden={handleToggleHidden} 
-              isSuperAdmin={isSuperAdmin} 
-              emptyMessage="現在、掲載中のイベントはありません。"
-            />
-
-            {myPast.length > 0 && (
-              <details className="group border-t border-gray-200">
-                <summary className="cursor-pointer bg-gray-100 px-4 py-3 text-sm font-bold text-gray-500 hover:bg-gray-200 flex items-center gap-2">
-                  <span className="group-open:rotate-90 transition-transform">▶</span>
-                  終了したイベントを表示 ({myPast.length})
-                </summary>
-                <div className="bg-gray-50">
-                  <EventTable 
-                    events={myPast} 
-                    onDelete={handleDelete} 
-                    onToggleHidden={handleToggleHidden} 
-                    isSuperAdmin={isSuperAdmin} 
-                  />
-                </div>
-              </details>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// --- テーブルコンポーネント (変更なし) ---
-function EventTable({ events, onDelete, onToggleHidden, isSuperAdmin, emptyMessage = "投稿がありません" }: { 
-  events: Event[], 
-  onDelete: (id: number, poster_id?: string, title?: string) => void, 
-  onToggleHidden: (id: number, current: boolean, poster_id?: string, title?: string) => void,
-  isSuperAdmin: boolean,
-  emptyMessage?: string 
-}) {
-  if (events.length === 0) {
-    return <div className="p-6 text-center text-gray-400 text-sm">{emptyMessage}</div>;
-  }
-
-  return (
-    <div className="w-full">
-      {/* PC表示用ヘッダー (md以上で表示) */}
-      <div className="hidden md:grid grid-cols-12 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
-        <div className="col-span-2">開催日</div>
-        <div className="col-span-5">イベント名</div>
-        <div className="col-span-1 text-center">閲覧数</div>
-        <div className="col-span-4 text-right">操作</div>
-      </div>
-
-      <div className="divide-y divide-gray-200">
-        {events.map((event) => (
-          <div key={event.id} className={`p-4 md:px-6 md:py-4 ${event.is_hidden ? "bg-gray-100" : "bg-white"}`}>
-            
-            {/* --- スマホ用レイアウト (md未満) --- */}
-            <div className="md:hidden">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-sm text-gray-500 font-mono">{event.event_date}</span>
-                {event.is_hidden && (
-                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-500 text-white">非表示中</span>
-                )}
-              </div>
-              
-              <Link href={`/admin/edit/${event.id}`} className={`block text-base font-bold mb-2 ${event.is_hidden ? 'text-gray-500' : 'text-gray-900'}`}>
-                {event.title}
-              </Link>
-              
-              <div className="flex flex-wrap gap-2 mb-3">
-                {event.category && (
-                  <span className="px-2 py-0.5 text-xs bg-teal-50 text-teal-700 rounded border border-teal-100">
-                    {event.category}
-                  </span>
-                )}
-                <span className="text-xs text-gray-500">閲覧数: <span className="font-bold">{event.view_count || 0}</span></span>
-              </div>
-
-              <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100">
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => onToggleHidden(event.id, event.is_hidden, event.poster_id, event.title)}
-                    className={`text-xs font-bold ${event.is_hidden ? 'text-blue-600' : 'text-gray-400'}`}
-                  >
-                    {event.is_hidden ? '公開する' : '非公開'}
-                  </button>
-                )}
-                <Link href={`/events/${event.id}`} target="_blank" className="text-xs text-gray-500 font-bold">確認</Link>
-                <Link href={`/admin/create?copy_from=${event.id}`} className="text-xs text-teal-600 font-bold">コピー</Link>
-                <Link href={`/admin/edit/${event.id}`} className="text-xs text-indigo-600 font-bold">編集</Link>
-                <button onClick={() => onDelete(event.id, event.poster_id, event.title)} className="text-xs text-red-600">削除</button>
-              </div>
-            </div>
-
-            {/* --- PC用レイアウト (md以上) --- */}
-            <div className="hidden md:grid grid-cols-12 items-center">
-              <div className="col-span-2 text-sm text-gray-500">
-                {event.event_date}
-                {event.is_hidden && (
-                  <span className="ml-2 px-2 py-0.5 rounded text-xs bg-gray-500 text-white">非表示</span>
-                )}
-              </div>
-              <div className="col-span-5">
-                <Link href={`/admin/edit/${event.id}`} className={`text-sm font-medium hover:underline ${event.is_hidden ? 'text-gray-500' : 'text-gray-900'}`}>
-                  {event.title}
-                </Link>
-                {event.category && (
-                  <span className="ml-2 px-2 py-0.5 text-xs bg-teal-50 text-teal-700 rounded border border-teal-100">
-                    {event.category}
-                  </span>
-                )}
-              </div>
-              <div className="col-span-1 text-center text-sm font-bold text-gray-600">
-                {event.view_count || 0}
-              </div>
-              <div className="col-span-4 text-right text-sm font-medium flex justify-end items-center gap-4">
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => onToggleHidden(event.id, event.is_hidden, event.poster_id, event.title)}
-                    className={`${event.is_hidden ? 'text-blue-600' : 'text-gray-400'} whitespace-nowrap`}
-                  >
-                    {event.is_hidden ? '公開' : '非公開'}
-                  </button>
-                )}
-                <Link href={`/events/${event.id}`} target="_blank" className="text-gray-500 hover:text-gray-900 whitespace-nowrap">確認</Link>
-                <Link href={`/admin/create?copy_from=${event.id}`} className="text-teal-600 hover:text-teal-900 whitespace-nowrap">コピー</Link>
-                <Link href={`/admin/edit/${event.id}`} className="text-indigo-600 hover:text-indigo-900 whitespace-nowrap">編集</Link>
-                <button onClick={() => onDelete(event.id, event.poster_id, event.title)} className="text-red-600 hover:text-red-900 whitespace-nowrap">削除</button>
-              </div>
-            </div>
-
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 </file>
@@ -4562,16 +4269,364 @@ function EventTable({ events, onDelete, onToggleHidden, isSuperAdmin, emptyMessa
 }
 </file>
 
-<file path="app/page.tsx">
-import { createClient } from '@supabase/supabase-js';
+<file path="app/admin/page.tsx">
+'use client';
+
 import Link from 'next/link';
-import { formatDate, getDaysUntil } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
+import { QRCodeSVG } from 'qrcode.react';
+import Tutorial from '@/app/components/Tutorial';
+import { useAdminDashboard, Event } from '@/app/hooks/useAdminDashboard';
+
+export default function AdminDashboard() {
+  const {
+    events, messages, applications, reports, loading, myProfile, inviteUrl, currentUserId,
+    // ★追加: メンテナンス関連
+    isMaintenance, toggleMaintenance,
+    showQrCode, setShowQrCode, showMailMenu, setShowMailMenu, showMessages, setShowMessages,
+    showApplications, setShowApplications, showReports, setShowReports, runTutorial, setRunTutorial,
+    mailMenuRef, applicationPanelRef, reportPanelRef,
+    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose
+  } = useAdminDashboard();
+
+  if (loading) return <div className="p-10 text-center">読み込み中...</div>;
+
+  const hasAdminPrivileges = ['admin', 'super_admin'].includes(myProfile?.role || '');
+  const isSuperAdmin = myProfile?.role === 'super_admin';
+  const unreadCount = messages.filter(m => !m.is_read).length;
+  const pendingAppsCount = applications.length;
+  const reportsCount = reports.length;
+
+  const splitEventsByDate = (list: Event[]) => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      upcoming: list.filter(e => e.event_date >= today),
+      past: list.filter(e => e.event_date < today)
+    };
+  };
+
+  const myEvents = hasAdminPrivileges ? events.filter(e => e.poster_id === currentUserId) : events;
+  const { upcoming: myUpcoming, past: myPast } = splitEventsByDate(myEvents);
+
+  const otherEvents = hasAdminPrivileges ? events.filter(e => e.poster_id !== currentUserId) : [];
+  const groupedOtherEvents: Record<string, Event[]> = {};
+  otherEvents.forEach(e => {
+    const name = e.profiles?.name || '不明';
+    if (!groupedOtherEvents[name]) groupedOtherEvents[name] = [];
+    groupedOtherEvents[name].push(e);
+  });
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <Tutorial run={runTutorial} onClose={handleTutorialClose} isAdmin={hasAdminPrivileges} />
+
+      <div className="max-w-4xl mx-auto">
+        {/* ヘッダーエリア */}
+        <div id="tutorial-header" className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-4 md:p-6 rounded-xl shadow-sm relative z-20">
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
+              {myProfile?.avatar_url ? (
+                <img src={myProfile.avatar_url} alt="Icon" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-xs">No Img</div>
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl md:text-2xl font-bold">マイページ</h1>
+                <Link href="/" className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 flex items-center gap-1 border border-blue-200">
+                  <span>🏠</span> ホーム
+                </Link>
+                <button onClick={() => setRunTutorial(true)} className="text-xs text-gray-400 underline hover:text-gray-600">? ヘルプ</button>
+              </div>
+              <p className="text-gray-600 font-medium text-sm md:text-base mt-1">
+                {myProfile?.name || '名無し'} さん
+                {hasAdminPrivileges && <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-1 rounded">管理者</span>}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto justify-end">
+            {hasAdminPrivileges && (
+              <>
+                {/* 通報ボタン */}
+                <div className="relative" ref={reportPanelRef} id="tutorial-report">
+                  <button onClick={() => setShowReports(!showReports)} className="relative px-3 py-2 text-red-700 font-bold hover:bg-red-50 rounded-lg border border-red-200 text-sm flex items-center gap-2">
+                    <span>⚠️ 通報</span>
+                    {reportsCount > 0 && <span className="px-1.5 py-0.5 text-xs text-white bg-red-600 rounded-full animate-pulse">{reportsCount}</span>}
+                  </button>
+                  {showReports && (
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-xl border border-red-200 overflow-hidden z-50 max-h-96 overflow-y-auto">
+                      {reports.length === 0 ? <div className="p-4 text-center text-gray-500 text-sm">なし</div> : (
+                        reports.map(r => (
+                          <div key={r.id} className="p-3 border-b hover:bg-gray-50">
+                            <p className="text-xs font-bold text-red-800">{r.reason}</p>
+                            <p className="text-xs text-gray-500 mt-1">対象: {r.events?.title || '削除済'}</p>
+                            <button onClick={() => deleteReport(r.id)} className="text-xs text-red-600 underline mt-2">対応済として削除</button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 申請ボタン */}
+                <div className="relative" ref={applicationPanelRef} id="tutorial-application">
+                  <button onClick={() => setShowApplications(!showApplications)} className="relative px-3 py-2 text-orange-700 font-bold hover:bg-orange-50 rounded-lg border border-orange-200 text-sm flex items-center gap-2">
+                    <span>新規申請</span>
+                    {pendingAppsCount > 0 && <span className="px-1.5 py-0.5 text-xs text-white bg-red-600 rounded-full animate-pulse">{pendingAppsCount}</span>}
+                  </button>
+                  {showApplications && (
+                    <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-lg shadow-xl border border-orange-200 overflow-hidden z-50 max-h-96 overflow-y-auto">
+                      {applications.length === 0 ? <div className="p-4 text-center text-gray-500 text-sm">なし</div> : (
+                        applications.map(app => (
+                          <div key={app.id} className="p-4 border-b hover:bg-gray-50">
+                            <h4 className="font-bold text-sm">{app.organization_name}</h4>
+                            <p className="text-xs text-gray-500 mb-2">{app.activity_details}</p>
+                            <div className="flex gap-2 justify-end">
+                              <button onClick={() => handleReject(app.id, app.email, app.organization_name)} className="px-2 py-1 text-xs border rounded">却下</button>
+                              <button onClick={() => handleApprove(app)} className="px-2 py-1 text-xs bg-orange-500 text-white rounded font-bold">承認</button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* メールメニュー */}
+            <div className="relative" ref={mailMenuRef} id="tutorial-mail">
+              <button onClick={() => setShowMailMenu(!showMailMenu)} className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full">
+                <span className="text-xl">📩</span>
+                {unreadCount > 0 && <span className="absolute top-0 right-0 bg-red-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">{unreadCount}</span>}
+              </button>
+              {showMailMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border z-50">
+                  <button onClick={() => { setShowMailMenu(false); setShowMessages(true); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex justify-between">
+                    <span>📥 受信箱</span>
+                    {unreadCount > 0 && <span className="bg-red-100 text-red-600 text-xs px-2 rounded-full">{unreadCount}</span>}
+                  </button>
+                  <Link href="/admin/messages" className="block px-4 py-2 text-sm hover:bg-gray-100">📤 作成</Link>
+                </div>
+              )}
+              {showMessages && (
+                <>
+                  <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowMessages(false)} />
+                  <div className="fixed top-20 right-4 w-96 bg-white rounded-lg shadow-xl z-50 max-h-[70vh] overflow-y-auto border">
+                    <div className="p-3 bg-gray-50 border-b flex justify-between font-bold text-sm">
+                      <span>お知らせ</span>
+                      <button onClick={() => setShowMessages(false)}>✕</button>
+                    </div>
+                    {messages.length === 0 ? <div className="p-4 text-center text-sm text-gray-500">なし</div> : (
+                      messages.map(msg => (
+                        <div key={msg.id} className={`p-4 border-b ${!msg.is_read ? 'bg-yellow-50' : ''}`}>
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span className="font-bold">{msg.sender?.name || '管理者'}</span>
+                            <span>{formatDate(msg.created_at)}</span>
+                          </div>
+                          <p className="text-sm mb-2">{msg.content}</p>
+                          <div className="flex justify-end gap-3">
+                            {!msg.is_read && <button onClick={() => markAsRead(msg.id)} className="text-xs text-blue-600 font-bold">既読にする</button>}
+                            <button onClick={() => deleteMessage(msg.id)} className="text-xs text-gray-400 hover:text-red-600">削除</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <Link href="/admin/profile" id="tutorial-profile" className="text-sm font-bold text-gray-600 border px-3 py-2 rounded-lg hover:bg-gray-100 bg-white">
+              ⚙ プロフィール
+            </Link>
+            <button onClick={handleLogout} className="text-xs text-red-600 underline">ログアウト</button>
+          </div>
+        </div>
+
+        {/* ★追加: メンテナンス切り替えスイッチ（特権管理者のみ） */}
+        {isSuperAdmin && (
+          <div className={`mb-8 p-4 rounded-xl border flex items-center justify-between shadow-sm transition-colors ${isMaintenance ? 'bg-orange-100 border-orange-300' : 'bg-white border-gray-200'}`}>
+            <div>
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                {isMaintenance ? '🚧 メンテナンスモード: ON' : '🟢 メンテナンスモード: OFF'}
+              </h3>
+              <p className="text-xs text-gray-600 mt-1">
+                {isMaintenance 
+                  ? '現在、閲覧者には「メンテナンス中」画面が表示されています。' 
+                  : '通常通り公開されています。'}
+              </p>
+            </div>
+            <button
+              onClick={toggleMaintenance}
+              className={`px-4 py-2 rounded-lg font-bold text-sm shadow ${
+                isMaintenance 
+                  ? 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50' 
+                  : 'bg-gray-800 text-white hover:bg-gray-700'
+              }`}
+            >
+              {isMaintenance ? '解除する' : 'メンテナンスにする'}
+            </button>
+          </div>
+        )}
+
+        {/* QRコード表示エリア */}
+        {hasAdminPrivileges && (
+          <div className="mb-6">
+            <button onClick={() => setShowQrCode(!showQrCode)} className="w-full md:w-auto flex items-center gap-2 text-teal-700 font-bold border border-teal-300 bg-teal-50 px-4 py-3 rounded-lg hover:bg-teal-100 shadow-sm">
+              <span className="text-xl">🎟️</span> {showQrCode ? '招待QRを隠す' : '手動招待用QRを表示'}
+            </button>
+            {showQrCode && (
+              <div className="mt-4 bg-white p-6 rounded-xl shadow border border-teal-200 flex flex-col md:flex-row items-center gap-6">
+                <div className="p-2 border rounded">{inviteUrl && <QRCodeSVG value={inviteUrl} size={150} />}</div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-teal-800">手動招待用QRコード</h3>
+                  <p className="text-sm text-gray-600 mt-2 break-all font-mono bg-gray-100 p-2 rounded">{inviteUrl}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <Link href="/admin/create" id="tutorial-create-btn" className="block w-full md:w-auto text-center bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow hover:bg-blue-700 mb-8">
+          + 新しいイベントを作る
+        </Link>
+
+        {/* イベントリスト */}
+        {hasAdminPrivileges ? (
+          <div className="space-y-10">
+            {/* 自分の投稿 */}
+            <div className="bg-white rounded-lg shadow overflow-hidden border-2 border-blue-100">
+              <div className="bg-blue-50 px-4 py-3 border-b border-blue-200">
+                <h3 className="font-bold text-blue-800 text-sm">📌 あなたの投稿</h3>
+              </div>
+              <EventTable events={myUpcoming} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} emptyMessage="開催予定の投稿はありません。" />
+              {myPast.length > 0 && (
+                <details className="group border-t border-gray-100">
+                  <summary className="cursor-pointer bg-gray-50 px-4 py-3 text-sm font-bold text-gray-500 flex items-center gap-2">
+                    <span className="group-open:rotate-90 transition-transform">▶</span> 終了したイベント ({myPast.length})
+                  </summary>
+                  <EventTable events={myPast} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} />
+                </details>
+              )}
+            </div>
+
+            {/* 他の団体の投稿 */}
+            {Object.keys(groupedOtherEvents).length > 0 && (
+              <div className="space-y-6">
+                <h2 className="text-lg md:text-xl font-bold text-gray-700 pl-2 border-l-4 border-gray-400">他の団体の投稿</h2>
+                {Object.entries(groupedOtherEvents).map(([name, list]) => {
+                  const { upcoming, past } = splitEventsByDate(list);
+                  return (
+                    <div key={name} className="bg-white rounded-lg shadow overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-3 border-b"><h3 className="font-bold text-gray-700 text-sm">📂 {name}</h3></div>
+                      <EventTable events={upcoming} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} emptyMessage="予定なし" />
+                      {past.length > 0 && (
+                         <details className="group border-t border-gray-100">
+                           <summary className="cursor-pointer bg-gray-50 px-4 py-2 text-xs font-bold text-gray-500 flex gap-2"><span className="group-open:rotate-90 transition-transform">▶</span> 終了分 ({past.length})</summary>
+                           <EventTable events={past} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} />
+                         </details>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* 一般投稿者用 */
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-teal-50 px-4 py-3 border-b border-teal-100"><h3 className="font-bold text-teal-800 text-sm">開催予定・開催中のイベント</h3></div>
+            <EventTable events={myUpcoming} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} emptyMessage="掲載中のイベントはありません。" />
+            {myPast.length > 0 && (
+              <details className="group border-t border-gray-200">
+                <summary className="cursor-pointer bg-gray-100 px-4 py-3 text-sm font-bold text-gray-500 flex gap-2"><span className="group-open:rotate-90 transition-transform">▶</span> 終了したイベント ({myPast.length})</summary>
+                <div className="bg-gray-50"><EventTable events={myPast} onDelete={handleDelete} onToggleHidden={handleToggleHidden} isSuperAdmin={isSuperAdmin} /></div>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// テーブルコンポーネント
+function EventTable({ events, onDelete, onToggleHidden, isSuperAdmin, emptyMessage = "投稿がありません" }: { 
+  events: Event[], 
+  onDelete: (id: number, poster_id?: string, title?: string) => void, 
+  onToggleHidden: (id: number, current: boolean, poster_id?: string, title?: string) => void,
+  isSuperAdmin: boolean,
+  emptyMessage?: string 
+}) {
+  if (events.length === 0) return <div className="p-6 text-center text-gray-400 text-sm">{emptyMessage}</div>;
+
+  return (
+    <div className="w-full">
+      <div className="hidden md:grid grid-cols-12 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+        <div className="col-span-2">開催日</div>
+        <div className="col-span-5">イベント名</div>
+        <div className="col-span-1 text-center">閲覧数</div>
+        <div className="col-span-4 text-right">操作</div>
+      </div>
+      <div className="divide-y divide-gray-200">
+        {events.map((event) => (
+          <div key={event.id} className={`p-4 md:px-6 md:py-4 ${event.is_hidden ? "bg-gray-100" : "bg-white"}`}>
+            {/* スマホ */}
+            <div className="md:hidden">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-sm text-gray-500 font-mono">{event.event_date}</span>
+                {event.is_hidden && <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-500 text-white">非表示中</span>}
+              </div>
+              <Link href={`/admin/edit/${event.id}`} className={`block text-base font-bold mb-2 ${event.is_hidden ? 'text-gray-500' : 'text-gray-900'}`}>{event.title}</Link>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {event.category && <span className="px-2 py-0.5 text-xs bg-teal-50 text-teal-700 rounded border border-teal-100">{event.category}</span>}
+                <span className="text-xs text-gray-500">閲覧数: <span className="font-bold">{event.view_count || 0}</span></span>
+              </div>
+              <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100">
+                {isSuperAdmin && <button onClick={() => onToggleHidden(event.id, event.is_hidden, event.poster_id, event.title)} className={`text-xs font-bold ${event.is_hidden ? 'text-blue-600' : 'text-gray-400'}`}>{event.is_hidden ? '公開する' : '非公開'}</button>}
+                <Link href={`/events/${event.id}`} target="_blank" className="text-xs text-gray-500 font-bold">確認</Link>
+                <Link href={`/admin/create?copy_from=${event.id}`} className="text-xs text-teal-600 font-bold">コピー</Link>
+                <Link href={`/admin/edit/${event.id}`} className="text-xs text-indigo-600 font-bold">編集</Link>
+                <button onClick={() => onDelete(event.id, event.poster_id, event.title)} className="text-xs text-red-600">削除</button>
+              </div>
+            </div>
+            {/* PC */}
+            <div className="hidden md:grid grid-cols-12 items-center">
+              <div className="col-span-2 text-sm text-gray-500">{event.event_date}{event.is_hidden && <span className="ml-2 px-2 py-0.5 rounded text-xs bg-gray-500 text-white">非表示</span>}</div>
+              <div className="col-span-5">
+                <Link href={`/admin/edit/${event.id}`} className={`text-sm font-medium hover:underline ${event.is_hidden ? 'text-gray-500' : 'text-gray-900'}`}>{event.title}</Link>
+                {event.category && <span className="ml-2 px-2 py-0.5 text-xs bg-teal-50 text-teal-700 rounded border border-teal-100">{event.category}</span>}
+              </div>
+              <div className="col-span-1 text-center text-sm font-bold text-gray-600">{event.view_count || 0}</div>
+              <div className="col-span-4 text-right text-sm font-medium flex justify-end items-center gap-4">
+                {isSuperAdmin && <button onClick={() => onToggleHidden(event.id, event.is_hidden, event.poster_id, event.title)} className={`${event.is_hidden ? 'text-blue-600' : 'text-gray-400'} whitespace-nowrap`}>{event.is_hidden ? '公開' : '非公開'}</button>}
+                <Link href={`/events/${event.id}`} target="_blank" className="text-gray-500 hover:text-gray-900 whitespace-nowrap">確認</Link>
+                <Link href={`/admin/create?copy_from=${event.id}`} className="text-teal-600 hover:text-teal-900 whitespace-nowrap">コピー</Link>
+                <Link href={`/admin/edit/${event.id}`} className="text-indigo-600 hover:text-indigo-900 whitespace-nowrap">編集</Link>
+                <button onClick={() => onDelete(event.id, event.poster_id, event.title)} className="text-red-600 hover:text-red-900 whitespace-nowrap">削除</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/page.tsx">
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import Link from 'next/link';
+import EventList from '@/app/components/EventList';
+import Maintenance from '@/app/components/Maintenance';
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
-// 1ページあたりの表示件数
 const PER_PAGE = 10;
 
 type Event = {
@@ -4588,13 +4643,22 @@ type Event = {
   } | null;
 };
 
-// 戻り値の型
 type EventsResult = {
   events: Event[];
   total: number | null;
 };
 
-// ページ番号(page)を受け取るように修正
+// ★修正: any ではなく SupabaseClient 型を指定
+async function checkMaintenance(supabase: SupabaseClient) {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('value')
+    .eq('key', 'maintenance_mode')
+    .single();
+  
+  return data?.value === 'true';
+}
+
 async function getEvents(page: number): Promise<EventsResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -4608,7 +4672,6 @@ async function getEvents(page: number): Promise<EventsResult> {
   const today = new Date().toISOString().split('T')[0];
   const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // ページネーションの計算
   const from = (page - 1) * PER_PAGE;
   const to = from + PER_PAGE - 1;
 
@@ -4637,6 +4700,16 @@ export default async function Home({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
+  // Supabaseクライアント作成とメンテナンスチェック
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  const isMaintenance = await checkMaintenance(supabase);
+  if (isMaintenance) {
+    return <Maintenance />;
+  }
+
   const resolvedSearchParams = await searchParams;
   const page = typeof resolvedSearchParams.page === 'string' ? parseInt(resolvedSearchParams.page) : 1;
   
@@ -4661,6 +4734,7 @@ export default async function Home({
           </div>
         </div>
         
+        
         {/* ログインボタン */}
         <div>
           <Link 
@@ -4671,138 +4745,11 @@ export default async function Home({
           </Link>
         </div>
       </header>
+      
 
       <div className="max-w-md mx-auto md:max-w-4xl p-4 flex-grow w-full">
-        {events.length === 0 && (
-          <div className="bg-white p-8 rounded-lg text-center mt-10 shadow-sm border border-slate-200">
-            <p className="text-xl text-slate-600 mb-2">
-              {page === 1 ? '現在、予定されているイベントはありません。' : 'このページにイベントはありません。'}
-            </p>
-            {page > 1 && (
-               <Link href="/" className="text-blue-600 hover:underline mt-4 block">先頭に戻る</Link>
-            )}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
-          {events.map((event, index) => {
-            const statusLabel = getDaysUntil(event.event_date);
-            const posterName = event.profiles?.name || '主催者不明';
-            const posterIcon = event.profiles?.avatar_url;
-            
-            const loadingType = index < 3 ? "eager" : "lazy";
-
-            return (
-              <Link key={event.id} href={`/events/${event.id}`} className="block group">
-                <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg overflow-hidden transform transition duration-200 active:scale-95 border-b-4 border-slate-200 h-full flex flex-col">
-                  
-                  {/* 画像エリア */}
-                  <div className="relative aspect-[4/3] bg-slate-100">
-                    {event.image_url ? (
-                      <img 
-                        src={event.image_url} 
-                        alt={event.title} 
-                        loading={loadingType}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-200 text-slate-400 text-lg font-bold">
-                        No Image
-                      </div>
-                    )}
-                    
-                    {/* ★修正: カテゴリ表示（文字サイズを大きく text-xs -> text-sm） */}
-                    {event.category && (
-                      <span className="absolute top-2 left-2 bg-white/95 text-teal-900 text-sm font-bold px-3 py-1 rounded shadow border border-teal-100">
-                        {event.category}
-                      </span>
-                    )}
-
-                    {/* 開催までの日数 */}
-                    {statusLabel && (
-                      <span className="absolute top-2 right-2 bg-rose-600 text-white text-base font-bold px-3 py-1 rounded-full shadow border-2 border-white">
-                        {statusLabel}
-                      </span>
-                    )}
-
-                    {/* 地区表示 */}
-                    {event.area && (
-                      <span className="absolute bottom-2 left-2 bg-sky-100 text-sky-900 text-sm font-bold px-3 py-1.5 rounded shadow-sm border border-sky-200">
-                        📍 {event.area}
-                      </span>
-                    )}
-
-                  </div>
-
-                  <div className="p-5 flex-grow">
-                    <p className="text-blue-700 font-bold text-xl mb-2">
-                      📅 {formatDate(event.event_date)}
-                    </p>
-                    
-                    <h2 className="text-2xl font-bold text-gray-800 leading-tight mb-3 line-clamp-2">
-                      {event.title}
-                    </h2>
-                    
-                    <div className="text-gray-600 text-base space-y-3">
-                      <p className="line-clamp-1 flex items-center gap-1">
-                        <span>📍</span>
-                        {event.location || '場所の記載なし'}
-                      </p>
-                      
-                      <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg mt-2 border border-slate-100">
-                        <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex-shrink-0 border border-slate-200">
-                          {posterIcon ? (
-                            <img src={posterIcon} alt={posterName} loading="lazy" className="w-full h-full object-cover" />
-                          ) : (
-                            <svg className="w-full h-full text-slate-400 p-1" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                            </svg>
-                          )}
-                        </div>
-                        <span className="font-bold text-slate-700 truncate text-base">{posterName}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* ページネーション */}
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-4 mt-12 mb-8">
-            {page > 1 ? (
-              <Link 
-                href={`/?page=${page - 1}`}
-                className="px-6 py-3 bg-white text-blue-700 border-2 border-blue-700 rounded-full font-bold shadow-sm hover:bg-blue-50 transition"
-              >
-                ← 前のページ
-              </Link>
-            ) : (
-              <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border-2 border-gray-200 rounded-full font-bold cursor-not-allowed">
-                ← 前のページ
-              </button>
-            )}
-
-            <span className="text-gray-600 font-bold">
-              {page} / {totalPages}
-            </span>
-
-            {page < totalPages ? (
-              <Link 
-                href={`/?page=${page + 1}`}
-                className="px-6 py-3 bg-blue-700 text-white rounded-full font-bold shadow-md hover:bg-blue-800 transition"
-              >
-                次のページ →
-              </Link>
-            ) : (
-              <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border-2 border-gray-200 rounded-full font-bold cursor-not-allowed">
-                次のページ →
-              </button>
-            )}
-          </div>
-        )}
+        {/* クライアントコンポーネントにデータを渡す */}
+        <EventList events={events} page={page} totalPages={totalPages} />
       </div>
 
       {/* フッター */}

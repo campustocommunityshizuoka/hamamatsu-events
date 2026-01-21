@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
   // ▼▼▼ 既存の設定（ビルドエラー無視など） ▼▼▼
   eslint: {
     ignoreDuringBuilds: true,
@@ -50,7 +51,8 @@ const nextConfig = {
               "img-src 'self' blob: data: https://*.supabase.co https://*.googleusercontent.com https://*.google.com;",
               "font-src 'self' data: https://fonts.gstatic.com;",
               "frame-src 'self' https://*.google.com https://*.googleusercontent.com;",
-              "connect-src 'self' https://*.supabase.co https://*.googleapis.com;"
+              // ★修正箇所：Cloudflare Workers (https://*.workers.dev) への通信を許可に追加
+              "connect-src 'self' https://*.supabase.co https://*.googleapis.com https://*.workers.dev;"
             ].join(' ').replace(/\s{2,}/g, ' ').trim()
           }
         ],
