@@ -50,6 +50,9 @@ export type Report = {
 
 const WORKER_URL = 'https://mail-sender.campustocommunityshizuoka.workers.dev/';
 
+// ★変更: チュートリアルのバージョンキーを更新
+const TUTORIAL_KEY = 'hasSeenAdminTutorial_v2';
+
 export function useAdminDashboard() {
   const router = useRouter();
   
@@ -61,7 +64,7 @@ export function useAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
-  const [isMaintenance, setIsMaintenance] = useState(false); // ★追加: メンテナンス状態
+  const [isMaintenance, setIsMaintenance] = useState(false);
   
   const [inviteUrl, setInviteUrl] = useState('');
   const [showQrCode, setShowQrCode] = useState(false);
@@ -99,7 +102,6 @@ export function useAdminDashboard() {
       const role = profile?.role || 'poster';
       const hasAdminPrivileges = ['admin', 'super_admin'].includes(role);
 
-      // ★追加: メンテナンス状態の取得
       if (role === 'super_admin') {
         const { data: setting } = await supabase
           .from('system_settings')
@@ -159,7 +161,8 @@ export function useAdminDashboard() {
 
       setLoading(false);
 
-      const hasSeenTutorial = localStorage.getItem('hasSeenAdminTutorial_v1');
+      // ★変更: 定数化したキーを使用
+      const hasSeenTutorial = localStorage.getItem(TUTORIAL_KEY);
       if (!hasSeenTutorial) {
         setTimeout(() => setRunTutorial(true), 1000);
       }
@@ -188,7 +191,6 @@ export function useAdminDashboard() {
     router.push('/login');
   };
 
-  // ★追加: メンテナンス切り替え
   const toggleMaintenance = async () => {
     if (myProfile?.role !== 'super_admin') return;
     
@@ -351,23 +353,20 @@ export function useAdminDashboard() {
 
   const handleTutorialClose = () => {
     setRunTutorial(false);
-    localStorage.setItem('hasSeenAdminTutorial_v1', 'true');
+    // ★変更: 定数化したキーを使用
+    localStorage.setItem(TUTORIAL_KEY, 'true');
   };
 
   return {
-    // Data
     events, messages, applications, reports, loading, myProfile,
-    inviteUrl, currentUserId, isMaintenance, // ★追加
-    // UI State
+    inviteUrl, currentUserId, isMaintenance,
     showQrCode, setShowQrCode,
     showMailMenu, setShowMailMenu,
     showMessages, setShowMessages,
     showApplications, setShowApplications,
     showReports, setShowReports,
     runTutorial, setRunTutorial,
-    // Refs
     mailMenuRef, messagePanelRef, applicationPanelRef, reportPanelRef,
-    // Actions
-    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose, toggleMaintenance // ★追加
+    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose, toggleMaintenance
   };
 }

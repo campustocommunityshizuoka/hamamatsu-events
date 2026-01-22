@@ -4,7 +4,8 @@ import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
 import AccessibilityMenu from '@/app/components/AccessibilityMenu';
 import ViewCounter from '@/app/components/ViewCounter';
-import ReportButton from '@/app/components/ReportButton'; 
+import ReportButton from '@/app/components/ReportButton';
+import ImageCarousel from '@/app/components/ImageCarousel'; // ★追加
 
 export const runtime = 'edge';
 export const revalidate = 0;
@@ -18,9 +19,12 @@ type Event = {
   category: string | null;
   contact_phone: string | null;
   image_url: string | null;
+  additional_images: string[] | null; // ★追加
+  tags: string[] | null;
   profiles: {
     name: string | null;
     avatar_url: string | null;
+    website_url: string | null;
   } | null;
 };
 
@@ -29,7 +33,7 @@ async function getEvent(id: string) {
     .from('events')
     .select(`
       *,
-      profiles ( name, avatar_url )
+      profiles ( name, avatar_url, website_url )
     `)
     .eq('id', id)
     .single();
@@ -53,6 +57,13 @@ export default async function EventDetailPage({
 
   const posterName = event.profiles?.name || '主催者不明';
   const posterIcon = event.profiles?.avatar_url;
+  const posterUrl = event.profiles?.website_url;
+
+  // 画像リストの作成（メイン画像 + 追加画像）
+  const allImages = [
+    event.image_url,
+    ...(event.additional_images || [])
+  ].filter((img): img is string => !!img);
 
   // 読み上げテキスト作成
   const spokenDate = new Date(event.event_date).toLocaleDateString('ja-JP', {
@@ -81,116 +92,135 @@ export default async function EventDetailPage({
       <AccessibilityMenu textToRead={readingText} />
 
       <div className="p-4 bg-gray-100 border-b sticky top-0 z-10">
-        <Link href="/" className="inline-flex items-center text-xl font-bold text-blue-700 py-2 px-4 border-2 border-blue-700 rounded-lg bg-white hover:bg-blue-50">
+        <Link href="/" className="inline-flex items-center text-sm font-bold text-slate-600 py-2 px-4 border border-slate-300 rounded-full bg-white hover:bg-slate-50 transition-colors">
           ← もどる
         </Link>
       </div>
 
       <div className="max-w-2xl mx-auto">
-        {/* 画像エリア */}
-        <div className="w-full h-64 md:h-96 bg-gray-200">
-          {event.image_url ? (
-            <img 
-              src={event.image_url} 
-              alt={event.title} 
-              className="w-full h-full object-cover" 
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-400 text-2xl">
-              画像なし
-            </div>
-          )}
-        </div>
+        
+        {/* ★修正: 画像カルーセルコンポーネントを使用 */}
+        <ImageCarousel images={allImages} alt={event.title} />
 
         <div className="p-6 space-y-8">
-              <div className="flex items-center gap-3 border-b pb-4">
-                  <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
+              {/* 主催者情報 & HPリンク */}
+              <div className="flex items-center gap-4 border-b pb-6">
+                  <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
                     {posterIcon ? (
                       <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
                     ) : (
-                      <svg className="w-full h-full text-gray-500 p-2" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-full h-full text-gray-500 p-3" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                       </svg>
                     )}
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">投稿・主催</p>
-                    <p className="text-lg font-bold text-gray-800">{posterName}</p>
+                    <p className="text-xs text-gray-500 font-bold mb-0.5">投稿・主催</p>
+                    <p className="text-lg font-bold text-gray-900 leading-tight">{posterName}</p>
+                    
+                    {posterUrl && (
+                      <a 
+                        href={posterUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline mt-1"
+                      >
+                        この団体のホームページはこちら
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                      </a>
+                    )}
                   </div>
               </div>
 
               <div>
                 {/* カテゴリ表示 */}
-                {event.category && (
-                  <span className="inline-block bg-teal-100 text-teal-800 text-base font-bold px-4 py-1.5 rounded-full mb-2 border border-teal-200">
-                    {event.category}
-                  </span>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  {event.category && (
+                    <span className="inline-block bg-teal-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow-sm">
+                      {event.category}
+                    </span>
+                  )}
+                </div>
+
+                {/* タグ表示 */}
+                {event.tags && event.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {event.tags.map((tag, index) => (
+                      <span key={index} className="text-sm font-bold text-gray-500">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
                 )}
-                <h1 className="text-3xl font-bold text-gray-900 leading-tight">
+
+                <h1 className="text-3xl font-extrabold text-gray-900 leading-tight tracking-tight">
                   {event.title}
                 </h1>
               </div>
 
               <div className="space-y-6 text-xl">
                 <div>
-                  <span className="text-gray-500 text-sm block">いつ</span>
-                  <span className="font-bold text-2xl">{formatDate(event.event_date)}</span>
+                  <span className="text-gray-500 text-xs font-bold block mb-1">開催日</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">📅</span>
+                    <span className="font-bold text-2xl text-gray-800">{formatDate(event.event_date)}</span>
+                  </div>
                 </div>
                 
-                <div className="border-t border-b py-6 my-6">
-                  <span className="text-gray-500 text-sm block mb-3">どこで</span>
-                  <div className="flex flex-col md:flex-row gap-6">
-                    <div className="flex-1">
-                        <p className="font-bold text-2xl mb-2">{event.location}</p>
-                        <a 
-                          /* ▼▼ 修正箇所1: HTTPS化とURL修正 ▼▼ */
-                          href={`https://maps.google.com/maps?q=${encodeURIComponent(event.location || '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
-                        >
-                          Googleマップアプリで見る
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </a>
+                <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                  <span className="text-gray-500 text-xs font-bold block mb-3">開催場所</span>
+                  <div className="flex flex-col gap-4">
+                    <div>
+                        <div className="flex items-start gap-2 mb-2">
+                          <span className="text-2xl mt-0.5">📍</span>
+                          <p className="font-bold text-2xl text-gray-800 leading-tight">{event.location || '未定'}</p>
+                        </div>
+                        
+                        {event.location && (
+                          <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 ml-9"
+                          >
+                            Googleマップアプリで見る
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                          </a>
+                        )}
                     </div>
 
-                    <div className="w-full md:w-1/2 h-64 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                      {event.location ? (
+                    {event.location && (
+                      <div className="w-full h-64 bg-gray-200 rounded-xl overflow-hidden border border-gray-300 shadow-sm relative">
                         <iframe
                           width="100%"
                           height="100%"
                           style={{ border: 0 }}
                           loading="lazy"
                           allowFullScreen
-                          /* ▼▼ 修正箇所2: HTTPS化とURL修正 ▼▼ */
                           src={`https://maps.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`}
                           title="Google Map"
                         ></iframe>
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-gray-400 text-base">
-                          場所情報がありません
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {event.contact_phone && (
-                  <div>
-                    <span className="text-gray-500 text-sm block">連絡先</span>
-                    <span className="font-bold text-2xl">{event.contact_phone}</span>
+                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <span className="text-blue-800 text-xs font-bold block mb-1">お問い合わせ電話番号</span>
+                    <span className="font-bold text-2xl text-slate-800">{event.contact_phone}</span>
                   </div>
                 )}
 
-                <div className="bg-orange-50 p-6 rounded-xl mt-4">
-                  <span className="text-gray-500 text-sm block mb-2">くわしい内容</span>
-                  <p className="whitespace-pre-wrap leading-relaxed text-lg">
+                <div className="mt-8 pt-8 border-t border-gray-200">
+                  <span className="text-gray-500 text-xs font-bold block mb-4">イベント詳細</span>
+                  <p className="whitespace-pre-wrap leading-loose text-base text-gray-700 font-medium">
                     {event.description}
                   </p>
                 </div>
 
                 {/* 通報ボタン */}
-                <div className="mt-8 flex justify-end">
+                <div className="mt-12 flex justify-center">
                   <ReportButton eventId={event.id} />
                 </div>
 

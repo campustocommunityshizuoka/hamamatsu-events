@@ -10,6 +10,8 @@ import imageCompression from 'browser-image-compression';
 const EVENT_POST_LIMIT = 5;
 // 設定: タグの最大数
 const MAX_TAGS = 4;
+// 設定: 追加画像の最大数
+const MAX_ADDITIONAL_IMAGES = 2;
 
 // カテゴリの選択肢
 const CATEGORY_OPTIONS = [
@@ -77,11 +79,19 @@ function CreateEventForm() {
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
-  const [tags, setTags] = useState<string[]>([]); // タグの状態管理
-  const [customTagInput, setCustomTagInput] = useState(''); // カスタムタグ入力欄
+  const [tags, setTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
 
+  // 画像関連ステート
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  
+  // 追加画像関連ステート
+  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
+  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
+
+  // プレビュー用のスライド管理
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -144,8 +154,8 @@ function CreateEventForm() {
         setLocation(data.location || '');
         setPhone(data.contact_phone || '');
         setDescription(data.description || '');
-        // コピー元のタグがあればセット（なければ空配列）
         setTags(data.tags || []);
+        // 画像はコピーしない仕様
       }
     };
     fetchSourceEvent();
@@ -160,21 +170,41 @@ function CreateEventForm() {
     }
   };
 
-  // タグ追加処理
+  const handleAdditionalImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const newFile = files[0];
+      if (additionalImages.length >= MAX_ADDITIONAL_IMAGES) {
+        alert(`追加写真は最大${MAX_ADDITIONAL_IMAGES}枚までです`);
+        return;
+      }
+      setAdditionalImages([...additionalImages, newFile]);
+      setAdditionalPreviews([...additionalPreviews, URL.createObjectURL(newFile)]);
+    }
+    e.target.value = '';
+  };
+
+  const removeAdditionalImage = (index: number) => {
+    const newImages = [...additionalImages];
+    const newPreviews = [...additionalPreviews];
+    newImages.splice(index, 1);
+    newPreviews.splice(index, 1);
+    setAdditionalImages(newImages);
+    setAdditionalPreviews(newPreviews);
+  };
+
   const addTag = (tagToAdd: string) => {
     const trimmedTag = tagToAdd.trim();
     if (!trimmedTag) return;
-    if (tags.length >= MAX_TAGS) return; // 上限チェック
-    if (tags.includes(trimmedTag)) return; // 重複チェック
+    if (tags.length >= MAX_TAGS) return;
+    if (tags.includes(trimmedTag)) return;
     setTags([...tags, trimmedTag]);
   };
 
-  // タグ削除処理
   const removeTag = (tagToRemove: string) => {
     setTags(tags.filter(t => t !== tagToRemove));
   };
 
-  // カスタムタグ追加
   const handleCustomTagAdd = (e: React.KeyboardEvent<HTMLInputElement> | React.MouseEvent) => {
     if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
     e.preventDefault();
@@ -194,7 +224,7 @@ function CreateEventForm() {
 
     if (!imageFile && !copyFromId) {
         if(!imageFile) {
-            alert('写真を選択してください');
+            alert('メイン写真を選択してください');
             return;
         }
     }
@@ -217,7 +247,31 @@ function CreateEventForm() {
     }
 
     setIsPreview(true);
+    setCurrentSlideIndex(0);
     window.scrollTo(0, 0);
+  };
+
+  // ★共通のアップロード関数（ここで圧縮を行うため、すべての画像に適用されます）
+  const uploadToStorage = async (file: File) => {
+    // 圧縮設定
+    const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.7 };
+    // 圧縮実行
+    const compressedFile = await imageCompression(file, options);
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from('event-images')
+      .upload(fileName, compressedFile);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('event-images')
+      .getPublicUrl(fileName);
+    
+    return data.publicUrl;
   };
 
   const handleSubmit = async () => {
@@ -227,26 +281,17 @@ function CreateEventForm() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('ログインしてください');
 
-      let imageUrl = null;
+      // 1. メイン画像のアップロード
+      let mainImageUrl = null;
       if (imageFile) {
-        const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.7 };
-        const compressedFile = await imageCompression(imageFile, options);
-        
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('event-images')
-          .upload(fileName, compressedFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data } = supabase.storage
-          .from('event-images')
-          .getPublicUrl(fileName);
-        
-        imageUrl = data.publicUrl;
+        mainImageUrl = await uploadToStorage(imageFile);
       }
+
+      // 2. 追加画像のアップロード（★並列処理で高速化）
+      // Promise.allを使って、すべての追加画像を同時に圧縮・アップロードします
+      const additionalImageUrls = await Promise.all(
+        additionalImages.map((file) => uploadToStorage(file))
+      );
 
       const { error: insertError } = await supabase
         .from('events')
@@ -258,9 +303,10 @@ function CreateEventForm() {
           location,
           contact_phone: phone,
           description,
-          image_url: imageUrl,
+          image_url: mainImageUrl,
           poster_id: user.id,
-          tags: tags, // タグを保存
+          tags: tags,
+          additional_images: additionalImageUrls, // 追加画像URLリスト
         });
 
       if (insertError) throw insertError;
@@ -283,6 +329,10 @@ function CreateEventForm() {
   const isLimitReached = !isAdmin && remainingPosts !== null && remainingPosts <= 0;
   const isSuperAdmin = userRole === 'super_admin';
   const isTagLimitReached = tags.length >= MAX_TAGS;
+  const isAdditionalImageLimitReached = additionalImages.length >= MAX_ADDITIONAL_IMAGES;
+
+  // プレビュー用の画像リスト（メイン + 追加）
+  const allPreviewImages = [previewImageUrl, ...additionalPreviews].filter(Boolean) as string[];
 
   if (isPreview) {
     return (
@@ -290,16 +340,55 @@ function CreateEventForm() {
         <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden border border-teal-100">
           <div className="bg-teal-50 p-4 border-b border-teal-100 text-center">
             <h2 className="text-xl font-bold text-teal-800">プレビュー確認</h2>
-            <p className="text-sm text-teal-600">実際の表示イメージです。この内容で公開しますか？</p>
+            <p className="text-sm text-teal-600">実際の表示イメージです（写真はスクロールで切り替わります）</p>
           </div>
 
           <div className="p-6 space-y-6">
-            <div className="w-full aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center relative">
-              {previewImageUrl ? (
-                <img src={previewImageUrl} alt="Preview" className="w-full h-full object-cover" />
+            {/* 簡易カルーセル（プレビュー用） */}
+            <div className="w-full aspect-video bg-gray-100 rounded-lg overflow-hidden relative group">
+              {allPreviewImages.length > 0 ? (
+                <>
+                  <img 
+                    src={allPreviewImages[currentSlideIndex]} 
+                    alt="Preview" 
+                    className="w-full h-full object-cover transition-opacity duration-500" 
+                  />
+                  
+                  {allPreviewImages.length > 1 && (
+                    <>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentSlideIndex((prev) => (prev === 0 ? allPreviewImages.length - 1 : prev - 1));
+                        }}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 text-white p-2 rounded-full hover:bg-black/50"
+                      >
+                        ◀
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentSlideIndex((prev) => (prev === allPreviewImages.length - 1 ? 0 : prev + 1));
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 text-white p-2 rounded-full hover:bg-black/50"
+                      >
+                        ▶
+                      </button>
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                        {allPreviewImages.map((_, idx) => (
+                          <div 
+                            key={idx} 
+                            className={`w-2 h-2 rounded-full ${idx === currentSlideIndex ? 'bg-white' : 'bg-white/50'}`} 
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
               ) : (
-                <div className="text-gray-400">No Image</div>
+                <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
               )}
+
               <span className="absolute top-2 left-2 bg-white/90 text-teal-800 text-xs font-bold px-2 py-1 rounded shadow">
                 {category}
               </span>
@@ -311,7 +400,6 @@ function CreateEventForm() {
             <div>
               <p className="text-gray-500 text-sm mb-1">{date.replaceAll('-', '/')}</p>
               
-              {/* ▼▼▼ タグ表示（イベント名の上、灰色文字） ▼▼▼ */}
               {tags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-1">
                   {tags.map((tag, index) => (
@@ -321,7 +409,7 @@ function CreateEventForm() {
                   ))}
                 </div>
               )}
-              
+
               <h1 className="text-2xl font-bold text-gray-900 mb-4">{title}</h1>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
@@ -399,13 +487,12 @@ function CreateEventForm() {
             </select>
           </div>
 
-          {/* ▼▼▼ タグ設定エリア ▼▼▼ */}
+          {/* タグ設定エリア */}
           <div className="border border-gray-200 rounded-md p-4 bg-gray-50">
             <label className="block text-sm font-bold text-gray-700 mb-2">
               タグ設定 <span className="text-xs font-normal text-gray-500">（最大{MAX_TAGS}つまで・検索に使われます）</span>
             </label>
             
-            {/* 選択済みタグ */}
             <div className="flex flex-wrap gap-2 mb-4 min-h-[30px]">
               {tags.map((tag, idx) => (
                 <span key={idx} className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
@@ -416,7 +503,6 @@ function CreateEventForm() {
               {tags.length === 0 && <span className="text-sm text-gray-400 py-1">タグが選択されていません</span>}
             </div>
 
-            {/* カスタムタグ入力 */}
             <div className="flex gap-2 mb-4">
               <input 
                 type="text" 
@@ -437,7 +523,6 @@ function CreateEventForm() {
               </button>
             </div>
 
-            {/* 推奨タグ（クリックで追加） */}
             <div className="space-y-3">
               <div>
                 <span className="text-xs font-bold text-gray-500 block mb-1">よく使われるタグ:</span>
@@ -476,7 +561,6 @@ function CreateEventForm() {
               )}
             </div>
           </div>
-          {/* ▲▲▲ タグ設定エリア終了 ▲▲▲ */}
 
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">
@@ -500,18 +584,66 @@ function CreateEventForm() {
             <textarea rows={6} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md" disabled={isLimitReached} />
           </div>
 
+          {/* ▼▼▼ 写真エリア（メイン + 追加2枚） ▼▼▼ */}
           <div className="border-t pt-6 border-dashed border-gray-300">
-            <label className="block text-sm font-bold text-gray-700 mb-2 text-center">
-              写真 <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              メイン写真 <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
             </label>
-            <div className="flex justify-center">
-              <label className={`cursor-pointer text-white font-bold py-3 px-8 rounded-full shadow-md flex items-center gap-2 ${isLimitReached ? 'bg-gray-400' : 'bg-orange-400 hover:bg-orange-500'}`}>
-                <span>📷 写真を選択する</span>
-                <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" disabled={isLimitReached} />
-              </label>
+            
+            {imageFile ? (
+              <div className="mb-4 relative w-48 aspect-video bg-gray-100 rounded-lg overflow-hidden border">
+                <img src={URL.createObjectURL(imageFile)} alt="Main" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => { setImageFile(null); setPreviewImageUrl(null); }}
+                  className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-start mb-4">
+                <label className={`cursor-pointer text-white font-bold py-3 px-8 rounded-full shadow-md flex items-center gap-2 transition ${isLimitReached ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-400 hover:bg-orange-500'}`}>
+                  <span>📷 メイン写真を選択</span>
+                  <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" disabled={isLimitReached} />
+                </label>
+              </div>
+            )}
+
+            <label className="block text-sm font-bold text-gray-700 mb-2 mt-6">
+              追加写真 <span className="text-gray-400 text-xs font-normal">（任意・最大2枚）</span>
+            </label>
+            
+            <div className="flex flex-wrap gap-4">
+              {additionalImages.map((img, idx) => (
+                <div key={idx} className="relative w-32 aspect-video bg-gray-100 rounded-lg overflow-hidden border">
+                  <img src={URL.createObjectURL(img)} alt={`Sub ${idx}`} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeAdditionalImage(idx)}
+                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 transition"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              {!isAdditionalImageLimitReached && (
+                <label className={`cursor-pointer w-32 aspect-video bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 hover:border-blue-400 transition ${isLimitReached ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <span className="text-2xl">+</span>
+                  <span className="text-xs font-bold">追加する</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleAdditionalImageSelect} 
+                    className="hidden" 
+                    disabled={isLimitReached} 
+                  />
+                </label>
+              )}
             </div>
-            {imageFile && <p className="text-center text-sm text-gray-600 mt-2">選択中: {imageFile.name}</p>}
           </div>
+          {/* ▲▲▲ 写真エリア終了 ▲▲▲ */}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
             <div>

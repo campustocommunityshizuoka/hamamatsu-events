@@ -12,6 +12,9 @@ export default function ProfileEditPage() {
   const [updating, setUpdating] = useState(false);
   
   const [name, setName] = useState('');
+  // ★追加: ホームページURLステート
+  const [websiteUrl, setWebsiteUrl] = useState('');
+
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
   const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
   const [mySearchId, setMySearchId] = useState<string | null>(null);
@@ -26,7 +29,7 @@ export default function ProfileEditPage() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('name, avatar_url, search_id')
+        .select('name, avatar_url, search_id, website_url') // ★追加: website_urlを取得
         .eq('id', user.id)
         .single();
 
@@ -36,6 +39,8 @@ export default function ProfileEditPage() {
         setName(data.name || '');
         setCurrentAvatarUrl(data.avatar_url);
         setMySearchId(data.search_id);
+        // ★追加: 取得したURLをセット
+        setWebsiteUrl(data.website_url || '');
       }
       setLoading(false);
     };
@@ -43,13 +48,12 @@ export default function ProfileEditPage() {
     fetchProfile();
   }, [router]);
 
-  // ★追加: URLからファイルパスを抽出するヘルパー関数
+  // URLからファイルパスを抽出するヘルパー関数
   const getFilePathFromUrl = (url: string) => {
     try {
-      // URL例: .../profile-images/userId-random.jpg
       const parts = url.split('/profile-images/');
       if (parts.length > 1) {
-        return decodeURIComponent(parts[1]); // 日本語ファイル名対応
+        return decodeURIComponent(parts[1]);
       }
       return null;
     } catch (e) {
@@ -145,10 +149,8 @@ export default function ProfileEditPage() {
       
       // 新しい画像が選択されている場合
       if (newAvatarFile) {
-        // 1. 新しい画像をアップロード
         avatarUrl = await uploadAvatar(newAvatarFile);
 
-        // 2. ★追加: 古い画像があれば削除
         if (currentAvatarUrl) {
           const oldFilePath = getFilePathFromUrl(currentAvatarUrl);
           if (oldFilePath) {
@@ -171,15 +173,15 @@ export default function ProfileEditPage() {
           name: name,
           avatar_url: avatarUrl,
           search_id: newSearchId,
+          website_url: websiteUrl, // ★追加: URLを保存
         })
         .eq('id', user.id);
 
       if (error) throw error;
 
       setMySearchId(newSearchId);
-      // 更新成功後に現在のURLを更新（次回変更時に今回の画像を消せるように）
       setCurrentAvatarUrl(avatarUrl); 
-      setNewAvatarFile(null); // ファイル選択状態をリセット
+      setNewAvatarFile(null);
 
       alert('プロフィールを更新しました！');
       router.push('/admin');
@@ -192,7 +194,6 @@ export default function ProfileEditPage() {
     }
   };
 
-  // アカウント削除処理
   const handleDeleteAccount = async () => {
     if (!window.confirm('【警告】本当にアカウントを削除しますか？\n\n投稿したイベント、メッセージ、画像など全てのデータが完全に削除され、復元することはできません。')) {
       return;
@@ -267,6 +268,23 @@ export default function ProfileEditPage() {
             />
             <p className="text-xs text-gray-400 mt-1">
               ※すでに存在する名前や、紛らわしい名前には変更できません。
+            </p>
+          </div>
+
+          {/* ★追加: ホームページURL入力欄 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              団体のホームページURL <span className="text-gray-400 font-normal text-xs">(任意)</span>
+            </label>
+            <input 
+              type="url" 
+              value={websiteUrl} 
+              onChange={(e) => setWebsiteUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              イベント詳細ページにリンクが表示されます。SNSのURLでもOKです。
             </p>
           </div>
 
