@@ -14,20 +14,24 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ▼▼▼ ★追加機能: なりすまし防止用のID生成ロジック ▼▼▼
+  // ▼▼▼ ★修正: ホワイトリスト方式による最強のID生成ロジック ▼▼▼
   const generateSearchId = (str: string) => {
-    return str
-      // 1. NFKC正規化（全角英数を半角に、などを統一）
-      .normalize('NFKC')
-      // 2. 小文字に統一（英語対策）
+    let processed = str.normalize('NFKC');
+
+    // 1. 括弧以降を切り捨て
+    processed = processed.replace(/[(\[{].*/, '');
+
+    return processed
+      // 2. 小文字に統一
       .toLowerCase()
-      // 3. スペース、タブ、アンダーバー、ハイフン、ドット、カンマを削除
-      .replace(/[\s\t_.\-,]/g, '')
-      // 4. 誤認しやすいカタカナを統一（簡易版）
-      .replace(/ン/g, 'ソ')  // ン を ソ に変換して同一視
-      .replace(/シ/g, 'ツ')  // シ を ツ に変換して同一視
-      .replace(/口/g, 'ロ')  // 漢字の口(くち) を カタカナのロ に変換
-      .replace(/ー/g, '-');  // 伸ばし棒もハイフン扱いで削除対象にしても良いが、ここでは統一
+      // 3. 【重要】文字（英数字・日本語）以外をすべて削除（ホワイトリスト方式）
+      // これによりスペース、記号、絵文字などは全て無視されます
+      .replace(/[^a-z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '')
+      // 4. 誤認しやすい文字の統一
+      .replace(/ン/g, 'ソ')
+      .replace(/シ/g, 'ツ')
+      .replace(/口/g, 'ロ')
+      .replace(/ー/g, '-');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -35,7 +39,6 @@ export default function RegisterPage() {
     setLoading(true);
     setErrorMsg(null);
 
-    // バリデーション
     if (!name.trim()) {
       setErrorMsg('名前を入力してください');
       setLoading(false);
@@ -43,36 +46,37 @@ export default function RegisterPage() {
     }
 
     try {
-      // 1. 検索用ID（なりすまし判定用文字列）を生成
+      // 1. 検索用ID生成
       const searchId = generateSearchId(name);
 
+      // 文字のみにした結果、短すぎる場合は弾く（例: 「★」だけ入力など）
       if (searchId.length < 2) {
-        setErrorMsg('有効な文字が少なすぎます。記号やスペースを除いて2文字以上にしてください。');
+        setErrorMsg('有効な文字が少なすぎます。記号やスペースを除いて2文字以上の名前にしてください。');
         setLoading(false);
         return;
       }
 
-      // 2. 重複チェック（DBの関数を呼び出す）
+      // 2. 重複チェック
       const { data: isExists, error: rpcError } = await supabase
         .rpc('check_search_id_exists', { target_id: searchId });
 
       if (rpcError) throw rpcError;
 
       if (isExists) {
-        setErrorMsg('この名前（または酷似した名前）は既に使用されています。別の名前入力してください。');
+        setErrorMsg('この名前（または酷似した名前）は既に使用されています。別の名前を入力してください。');
         setLoading(false);
         return;
       }
 
-      // 3. 登録処理（metadataに search_id を含める）
+      // 3. 登録処理
       const location = window.location.origin;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: { 
-            name: name,          // 表示用の名前（そのまま）
-            search_id: searchId  // 重複チェック用の名前（裏側で保存）
+            name: name,
+            search_id: searchId
           },
           emailRedirectTo: `${location}/admin`,
         },
@@ -83,13 +87,17 @@ export default function RegisterPage() {
       } else {
         if (data.user) {
           alert('確認メールを送信しました。メール内のリンクをクリックするとマイページへ移動します。');
-          router.push('/login'); // 新規登録後はログイン画面へ飛ばすのが一般的
+          router.push('/login');
         }
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setErrorMsg('システムエラーが発生しました。');
+      let message = 'システムエラーが発生しました。';
+      if (err instanceof Error) {
+        message += ` (${err.message})`;
+      }
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }
@@ -118,7 +126,7 @@ export default function RegisterPage() {
               onChange={(e) => setName(e.target.value)}
             />
             <p className="text-xs text-gray-400 mt-1">
-              ※スペースや記号の違いのみ、紛らわしい文字（ンとソなど）の違いのみの名前は登録できません。
+              ※スペースや記号の違い、括弧書き（学生、支部など）の違いのみの名前は登録できません。
             </p>
           </div>
 

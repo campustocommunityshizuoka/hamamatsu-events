@@ -12,7 +12,6 @@ export default function ProfileEditPage() {
   const [updating, setUpdating] = useState(false);
   
   const [name, setName] = useState('');
-  // ★追加: ホームページURLステート
   const [websiteUrl, setWebsiteUrl] = useState('');
 
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
@@ -29,7 +28,7 @@ export default function ProfileEditPage() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('name, avatar_url, search_id, website_url') // ★追加: website_urlを取得
+        .select('name, avatar_url, search_id, website_url')
         .eq('id', user.id)
         .single();
 
@@ -39,7 +38,6 @@ export default function ProfileEditPage() {
         setName(data.name || '');
         setCurrentAvatarUrl(data.avatar_url);
         setMySearchId(data.search_id);
-        // ★追加: 取得したURLをセット
         setWebsiteUrl(data.website_url || '');
       }
       setLoading(false);
@@ -48,7 +46,6 @@ export default function ProfileEditPage() {
     fetchProfile();
   }, [router]);
 
-  // URLからファイルパスを抽出するヘルパー関数
   const getFilePathFromUrl = (url: string) => {
     try {
       const parts = url.split('/profile-images/');
@@ -56,17 +53,25 @@ export default function ProfileEditPage() {
         return decodeURIComponent(parts[1]);
       }
       return null;
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('パス解析エラー', e);
       return null;
     }
   };
 
+  // ▼▼▼ ★修正: ホワイトリスト方式による最強のID生成ロジック ▼▼▼
   const generateSearchId = (str: string) => {
-    return str
-      .normalize('NFKC')
+    let processed = str.normalize('NFKC');
+
+    // 1. 括弧以降を切り捨て
+    processed = processed.replace(/[(\[{].*/, '');
+
+    return processed
+      // 2. 小文字に統一
       .toLowerCase()
-      .replace(/[\s\t_.\-,]/g, '')
+      // 3. 【重要】文字（英数字・日本語）以外をすべて削除（ホワイトリスト方式）
+      .replace(/[^a-z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '')
+      // 4. 誤認しやすい文字の統一
       .replace(/ン/g, 'ソ')
       .replace(/シ/g, 'ツ')
       .replace(/口/g, 'ロ')
@@ -106,7 +111,7 @@ export default function ProfileEditPage() {
 
       return data.publicUrl;
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('アイコン画像の処理エラー:', error);
       throw error;
     }
@@ -127,7 +132,7 @@ export default function ProfileEditPage() {
       const newSearchId = generateSearchId(name);
 
       if (newSearchId.length < 2) {
-        alert('名前が短すぎます。記号などを除いて2文字以上にしてください。');
+        alert('名前が短すぎます。記号や括弧内の補足を除いて2文字以上の名前にしてください。');
         setUpdating(false);
         return;
       }
@@ -147,7 +152,6 @@ export default function ProfileEditPage() {
 
       let avatarUrl = currentAvatarUrl;
       
-      // 新しい画像が選択されている場合
       if (newAvatarFile) {
         avatarUrl = await uploadAvatar(newAvatarFile);
 
@@ -173,7 +177,7 @@ export default function ProfileEditPage() {
           name: name,
           avatar_url: avatarUrl,
           search_id: newSearchId,
-          website_url: websiteUrl, // ★追加: URLを保存
+          website_url: websiteUrl,
         })
         .eq('id', user.id);
 
@@ -186,7 +190,7 @@ export default function ProfileEditPage() {
       alert('プロフィールを更新しました！');
       router.push('/admin');
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(error);
       alert('更新に失敗しました');
     } finally {
@@ -214,7 +218,7 @@ export default function ProfileEditPage() {
       alert('アカウントを削除しました。ご利用ありがとうございました。');
       router.push('/');
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('削除エラー:', error);
       alert('アカウントの削除に失敗しました。時間をおいて再度お試しください。');
       setUpdating(false);
@@ -271,7 +275,7 @@ export default function ProfileEditPage() {
             </p>
           </div>
 
-          {/* ★追加: ホームページURL入力欄 */}
+          {/* HP URL設定 */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               団体のホームページURL <span className="text-gray-400 font-normal text-xs">(任意)</span>
