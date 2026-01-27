@@ -89,8 +89,11 @@ async function getEvents(params: SearchParams): Promise<EventsResult> {
   const to = from + PER_PAGE - 1;
 
   const today = new Date().toISOString().split('T')[0];
-  const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
+  // ★変更箇所: 14日から30日（約1ヶ月）に変更
+  const oneMonthLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+  
   let query = supabase
     .from('events')
     .select(`
@@ -121,10 +124,11 @@ async function getEvents(params: SearchParams): Promise<EventsResult> {
     query = query.contains('tags', ['雨でもOK']);
   }
 
-  // 検索条件がない場合のみ、デフォルトで「2週間先まで」に絞る
+  // 検索条件がない場合のみ、デフォルトで「1ヶ月先まで」に絞る
   // (ただし、新着順で見たい場合などは期間制限を外す考え方もあるが、ここでは基本ルールに従う)
   if (!params.q && !params.category && !params.area && !params.rain && !params.sort) {
-     query = query.lte('event_date', twoWeeksLater);
+     // ★変更箇所: 変数名を oneMonthLater に変更
+     query = query.lte('event_date', oneMonthLater);
   }
 
   // 5. 並び替え

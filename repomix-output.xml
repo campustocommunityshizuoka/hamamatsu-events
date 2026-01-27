@@ -53,6 +53,8 @@ app/apply/page.tsx
 app/auth/callback/route.ts
 app/components/AccessibilityMenu.tsx
 app/components/EventList.tsx
+app/components/FilterBar.tsx
+app/components/ImageCarousel.tsx
 app/components/Maintenance.tsx
 app/components/PostButton.tsx
 app/components/ReportButton.tsx
@@ -347,6 +349,200 @@ export default function AccessibilityMenu({ textToRead }: Props) {
 }
 </file>
 
+<file path="app/components/FilterBar.tsx">
+'use client';
+
+import { useRouter, useSearchParams } from 'next/navigation';
+
+export default function FilterBar() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // URLパラメータから現在の状態を取得
+  const isRainOk = searchParams.get('rain') === 'true';
+  const sortOrder = searchParams.get('sort') || 'date_asc'; // default: date_asc
+
+  // パラメータを更新する関数
+  const updateParams = (key: string, value: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === null) {
+      params.delete(key);
+    } else {
+      params.set(key, value);
+    }
+    // ページ番号は1に戻す
+    params.set('page', '1');
+    router.push(`/?${params.toString()}`);
+  };
+
+  return (
+    <div className="flex flex-col sm:flex-row justify-between items-center mb-8 bg-white p-5 rounded-2xl shadow-sm border border-slate-300 gap-4">
+      
+      {/* 雨でもOK スイッチ */}
+      <div 
+        className="flex items-center gap-4 cursor-pointer group"
+        onClick={() => updateParams('rain', isRainOk ? null : 'true')}
+      >
+        <div className={`w-14 h-8 rounded-full relative transition-colors duration-300 ${isRainOk ? 'bg-blue-500' : 'bg-slate-300'}`}>
+          <div className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-sm transition-transform duration-300 ${isRainOk ? 'left-7' : 'left-1'}`}></div>
+        </div>
+        <span className={`text-base font-bold transition-colors ${isRainOk ? 'text-blue-700' : 'text-slate-700'}`}>
+          雨でもOK
+        </span>
+      </div>
+
+      {/* 並び替え プルダウン */}
+      <div className="flex items-center gap-3">
+        <label htmlFor="sort" className="text-sm font-bold text-slate-500 whitespace-nowrap">並び替え:</label>
+        <div className="relative">
+          <select
+            id="sort"
+            value={sortOrder}
+            onChange={(e) => updateParams('sort', e.target.value)}
+            className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 font-bold py-2 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+          >
+            <option value="date_asc">📅 開催が早い順</option>
+            <option value="newest">🆕 新着順</option>
+          </select>
+          {/* カスタム矢印アイコン */}
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+</file>
+
+<file path="app/components/ImageCarousel.tsx">
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+
+type Props = {
+  images: string[];
+  alt: string;
+};
+
+export default function ImageCarousel({ images, alt }: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // 自動スクロール（10秒）
+  useEffect(() => {
+    if (images.length <= 1) return;
+
+    const interval = setInterval(() => {
+      if (scrollRef.current) {
+        const nextIndex = (activeIndex + 1) % images.length;
+        const width = scrollRef.current.offsetWidth;
+        scrollRef.current.scrollTo({
+          left: width * nextIndex,
+          behavior: 'smooth',
+        });
+      }
+    }, 10000); // 10秒
+
+    return () => clearInterval(interval);
+  }, [activeIndex, images.length]);
+
+  // スクロール位置を検知してインジケーターを更新
+  const handleScroll = () => {
+    if (scrollRef.current) {
+      const width = scrollRef.current.offsetWidth;
+      // 現在のスクロール位置からインデックスを計算
+      const index = Math.round(scrollRef.current.scrollLeft / width);
+      if (index !== activeIndex) {
+        setActiveIndex(index);
+      }
+    }
+  };
+
+  if (images.length === 0) {
+    return (
+      <div className="w-full h-64 md:h-96 bg-gray-200 flex items-center justify-center text-gray-400 text-2xl font-bold">
+        No Image
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-64 md:h-96 bg-gray-200 group">
+      {/* スクロールコンテナ */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="w-full h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} // Firefox, IE用
+      >
+        {images.map((src, i) => (
+          <div key={i} className="flex-shrink-0 w-full h-full snap-center">
+            <img
+              src={src}
+              alt={`${alt} - 写真${i + 1}`}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        ))}
+      </div>
+      
+      {/* インジケーター（ドット） */}
+      {images.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+          {images.map((_, i) => (
+            <div
+              key={i}
+              className={`w-2 h-2 rounded-full transition-all shadow-sm ${
+                i === activeIndex ? 'bg-white scale-125' : 'bg-white/50'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+      
+      {/* 左右ナビゲーション（マウス操作用・ホバー時表示） */}
+      {images.length > 1 && (
+        <>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              if (scrollRef.current) {
+                const prev = activeIndex === 0 ? images.length - 1 : activeIndex - 1;
+                scrollRef.current.scrollTo({ left: scrollRef.current.offsetWidth * prev, behavior: 'smooth' });
+              }
+            }}
+            className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            ←
+          </button>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              if (scrollRef.current) {
+                const next = (activeIndex + 1) % images.length;
+                scrollRef.current.scrollTo({ left: scrollRef.current.offsetWidth * next, behavior: 'smooth' });
+              }
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            →
+          </button>
+        </>
+      )}
+      
+      {/* Chrome/Safari用スクロールバー非表示スタイル */}
+      <style jsx>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+    </div>
+  );
+}
+</file>
+
 <file path="app/components/Maintenance.tsx">
 'use client';
 
@@ -448,97 +644,6 @@ export default function ReportButton({ eventId }: { eventId: number }) {
       )}
     </>
   );
-}
-</file>
-
-<file path="app/components/Tutorial.tsx">
-'use client';
-
-import { useEffect } from 'react';
-import { driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
-
-type TutorialProps = {
-  run: boolean;
-  onClose: () => void;
-  isAdmin: boolean; // ★追加: 管理者かどうか
-};
-
-export default function Tutorial({ run, onClose, isAdmin }: TutorialProps) {
-  useEffect(() => {
-    if (run) {
-      // ステップ定義
-      // 各オブジェクトの side や align に as const を付けてリテラル型にします
-      const steps = [
-        { 
-          element: '#tutorial-header', 
-          popover: { 
-            title: 'マイページへようこそ', 
-            description: 'ここでは投稿の管理や、運営からのお知らせを確認できます。',
-            side: "bottom" as const,  // ★修正
-            align: 'start' as const   // ★修正
-          } 
-        },
-        { 
-          element: '#tutorial-mail', 
-          popover: { 
-            title: 'メッセージ機能', 
-            description: 'ここから「お知らせ（受信）」の確認や、運営への「メッセージ送信」ができます。未読がある場合はバッジがつきます。',
-            side: "bottom" as const   // ★修正
-          } 
-        },
-        { 
-          element: '#tutorial-create-btn', 
-            popover: { 
-            title: 'イベント作成', 
-            description: 'ここから新しいイベントを投稿できます。',
-            side: "bottom" as const   // ★修正
-          } 
-        },
-        // ★変更: 管理者の場合のみ配列に追加する
-        ...(isAdmin ? [
-          { 
-            element: '#tutorial-report', 
-            popover: { 
-              title: '通報・報告', 
-              description: '【管理者機能】ユーザーからの通報内容はここで確認・対応できます。',
-              side: "bottom" as const // ★修正
-            } 
-          },
-          { 
-            element: '#tutorial-application', 
-            popover: { 
-              title: '新規申請', 
-              description: '【管理者機能】新しい団体の利用申請はここに届きます。',
-              side: "bottom" as const // ★修正
-            } 
-          }
-        ] : []),
-        { 
-          element: '#tutorial-profile', 
-          popover: { 
-            title: 'プロフィール設定', 
-            description: 'アイコンや名前の変更はこちらから行えます。',
-            side: "left" as const     // ★修正
-          } 
-        },
-      ];
-
-      const driverObj = driver({
-        showProgress: true,
-        animate: true,
-        nextBtnText: '次へ',
-        prevBtnText: '戻る',
-        doneBtnText: '完了',
-        onDestroyed: onClose,
-        steps: steps 
-      });
-
-      driverObj.drive();
-    }
-  }, [run, onClose, isAdmin]);
-
-  return null;
 }
 </file>
 
@@ -1540,315 +1645,6 @@ export default function AdminMessagesPage() {
 }
 </file>
 
-<file path="app/admin/profile/page.tsx">
-'use client';
-
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import imageCompression from 'browser-image-compression';
-
-export default function ProfileEditPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  
-  const [name, setName] = useState('');
-  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
-  const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
-  const [mySearchId, setMySearchId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('name, avatar_url, search_id')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        console.error(error);
-      } else if (data) {
-        setName(data.name || '');
-        setCurrentAvatarUrl(data.avatar_url);
-        setMySearchId(data.search_id);
-      }
-      setLoading(false);
-    };
-
-    fetchProfile();
-  }, [router]);
-
-  // ★追加: URLからファイルパスを抽出するヘルパー関数
-  const getFilePathFromUrl = (url: string) => {
-    try {
-      // URL例: .../profile-images/userId-random.jpg
-      const parts = url.split('/profile-images/');
-      if (parts.length > 1) {
-        return decodeURIComponent(parts[1]); // 日本語ファイル名対応
-      }
-      return null;
-    } catch (e) {
-      console.error('パス解析エラー', e);
-      return null;
-    }
-  };
-
-  const generateSearchId = (str: string) => {
-    return str
-      .normalize('NFKC')
-      .toLowerCase()
-      .replace(/[\s\t_.\-,]/g, '')
-      .replace(/ン/g, 'ソ')
-      .replace(/シ/g, 'ツ')
-      .replace(/口/g, 'ロ')
-      .replace(/ー/g, '-');
-  };
-
-  const uploadAvatar = async (file: File) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No user');
-
-      console.log(`アイコン圧縮前: ${(file.size / 1024).toFixed(2)} KB`);
-
-      const options = {
-        maxSizeMB: 0.5,
-        maxWidthOrHeight: 800,
-        useWebWorker: true,
-        initialQuality: 0.7,
-      };
-
-      const compressedFile = await imageCompression(file, options);
-      console.log(`アイコン圧縮後: ${(compressedFile.size / 1024).toFixed(2)} KB`);
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images') 
-        .upload(filePath, compressedFile, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(filePath);
-
-      return data.publicUrl;
-
-    } catch (error) {
-      console.error('アイコン画像の処理エラー:', error);
-      throw error;
-    }
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      alert('名前は必須です');
-      return;
-    }
-    setUpdating(true);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not logged in');
-
-      const newSearchId = generateSearchId(name);
-
-      if (newSearchId.length < 2) {
-        alert('名前が短すぎます。記号などを除いて2文字以上にしてください。');
-        setUpdating(false);
-        return;
-      }
-
-      if (newSearchId !== mySearchId) {
-        const { data: isExists, error: rpcError } = await supabase
-          .rpc('check_search_id_exists', { target_id: newSearchId });
-
-        if (rpcError) throw rpcError;
-
-        if (isExists) {
-          alert('この名前（または酷似した名前）は既に使用されています。\n別の名前を入力してください。');
-          setUpdating(false);
-          return;
-        }
-      }
-
-      let avatarUrl = currentAvatarUrl;
-      
-      // 新しい画像が選択されている場合
-      if (newAvatarFile) {
-        // 1. 新しい画像をアップロード
-        avatarUrl = await uploadAvatar(newAvatarFile);
-
-        // 2. ★追加: 古い画像があれば削除
-        if (currentAvatarUrl) {
-          const oldFilePath = getFilePathFromUrl(currentAvatarUrl);
-          if (oldFilePath) {
-            const { error: deleteError } = await supabase.storage
-              .from('profile-images')
-              .remove([oldFilePath]);
-            
-            if (deleteError) {
-              console.error('旧アイコン削除失敗:', deleteError);
-            } else {
-              console.log('旧アイコンを削除しました:', oldFilePath);
-            }
-          }
-        }
-      }
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          name: name,
-          avatar_url: avatarUrl,
-          search_id: newSearchId,
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      setMySearchId(newSearchId);
-      // 更新成功後に現在のURLを更新（次回変更時に今回の画像を消せるように）
-      setCurrentAvatarUrl(avatarUrl); 
-      setNewAvatarFile(null); // ファイル選択状態をリセット
-
-      alert('プロフィールを更新しました！');
-      router.push('/admin');
-
-    } catch (error) {
-      console.error(error);
-      alert('更新に失敗しました');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  // アカウント削除処理
-  const handleDeleteAccount = async () => {
-    if (!window.confirm('【警告】本当にアカウントを削除しますか？\n\n投稿したイベント、メッセージ、画像など全てのデータが完全に削除され、復元することはできません。')) {
-      return;
-    }
-    
-    if (!window.confirm('本当によろしいですか？この操作は取り消せません。')) {
-      return;
-    }
-
-    setUpdating(true);
-
-    try {
-      const { error } = await supabase.rpc('delete_own_account');
-
-      if (error) throw error;
-
-      await supabase.auth.signOut();
-      alert('アカウントを削除しました。ご利用ありがとうございました。');
-      router.push('/');
-
-    } catch (error) {
-      console.error('削除エラー:', error);
-      alert('アカウントの削除に失敗しました。時間をおいて再度お試しください。');
-      setUpdating(false);
-    }
-  };
-
-  if (loading) return <div className="p-10">読み込み中...</div>;
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-xl mx-auto bg-white p-8 rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-6">プロフィールの編集</h1>
-        
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* アイコン設定 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">アイコン画像</label>
-            <div className="flex items-center gap-6">
-              <div className="w-20 h-20 rounded-full bg-gray-200 border overflow-hidden flex-shrink-0 relative">
-                {newAvatarFile ? (
-                  <img src={URL.createObjectURL(newAvatarFile)} className="w-full h-full object-cover" alt="New Avatar" />
-                ) : currentAvatarUrl ? (
-                  <img src={currentAvatarUrl} className="w-full h-full object-cover" alt="Current Avatar" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Img</div>
-                )}
-              </div>
-              
-              <div className="flex-1">
-                <input 
-                  type="file" 
-                  accept="image/*"
-                  onChange={(e) => setNewAvatarFile(e.target.files?.[0] || null)}
-                  className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full"
-                />
-                <p className="text-xs text-gray-400 mt-2">※画像は自動的に軽量化されます</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 名前設定 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">団体名・表示名 <span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-              placeholder="例：浜松老人会"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              ※すでに存在する名前や、紛らわしい名前には変更できません。
-            </p>
-          </div>
-
-          {/* ボタン */}
-          <div className="flex gap-4 pt-4 pb-8 border-b border-gray-200">
-            <Link href="/admin" className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-gray-700">
-              キャンセル
-            </Link>
-            <button
-              type="submit"
-              disabled={updating}
-              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-bold disabled:opacity-50"
-            >
-              {updating ? '保存中...' : '変更を保存する'}
-            </button>
-          </div>
-        </form>
-
-        {/* アカウント削除エリア */}
-        <div className="mt-8 pt-4">
-          <h3 className="text-sm font-bold text-gray-900 mb-2">アカウントの管理</h3>
-          <p className="text-xs text-gray-500 mb-4">
-            一度アカウントを削除すると、投稿したイベントやメッセージなど全てのデータが消去され、元に戻すことはできません。
-          </p>
-          <button
-            onClick={handleDeleteAccount}
-            disabled={updating}
-            className="text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 px-4 py-2 rounded text-sm font-bold w-full md:w-auto"
-          >
-            アカウントを削除する
-          </button>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-</file>
-
 <file path="app/api/invite/route.ts">
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -1874,265 +1670,6 @@ export async function GET(request: NextRequest) {
   });
 
   return response;
-}
-</file>
-
-<file path="app/components/EventList.tsx">
-'use client';
-
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { formatDate, getDaysUntil } from '@/lib/utils';
-import ShareToLine from '@/app/components/ShareToLine';
-
-type Event = {
-  id: number;
-  title: string;
-  event_date: string;
-  location: string | null;
-  area: string | null;
-  category: string | null;
-  image_url: string | null;
-  profiles: {
-    name: string | null;
-    avatar_url: string | null;
-  } | null;
-};
-
-type Props = {
-  events: Event[];
-  page: number;
-  totalPages: number;
-};
-
-export default function EventList({ events, page, totalPages }: Props) {
-  const [keptIds, setKeptIds] = useState<number[]>([]);
-  const [showKeptOnly, setShowKeptOnly] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('hamamatsu_event_keeps_v1');
-    if (saved) {
-      try {
-        setKeptIds(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse keeps', e);
-      }
-    }
-    setIsLoaded(true);
-  }, []);
-
-  const toggleKeep = (e: React.MouseEvent, id: number) => {
-    e.preventDefault();
-    let newIds;
-    if (keptIds.includes(id)) {
-      newIds = keptIds.filter(keepId => keepId !== id);
-    } else {
-      newIds = [...keptIds, id];
-    }
-    setKeptIds(newIds);
-    localStorage.setItem('hamamatsu_event_keeps_v1', JSON.stringify(newIds));
-  };
-
-  const displayedEvents = showKeptOnly
-    ? events.filter(event => keptIds.includes(event.id))
-    : events;
-
-  if (!isLoaded) return null;
-
-  return (
-    <div>
-      {/* タブ切り替え */}
-      <div className="flex justify-center mb-8">
-        <div className="bg-white p-1 rounded-full shadow-sm border border-gray-200 inline-flex">
-          <button
-            onClick={() => setShowKeptOnly(false)}
-            className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
-              !showKeptOnly ? 'bg-slate-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            一覧
-          </button>
-          <button
-            onClick={() => setShowKeptOnly(true)}
-            className={`px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-1 ${
-              showKeptOnly ? 'bg-pink-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            <span>♥</span> 気になる ({events.filter(e => keptIds.includes(e.id)).length})
-          </button>
-        </div>
-      </div>
-
-      {displayedEvents.length === 0 && (
-        <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
-          <p className="text-lg text-gray-500">表示できるイベントがありません</p>
-          {showKeptOnly && (
-            <button onClick={() => setShowKeptOnly(false)} className="text-blue-600 underline mt-4 text-sm font-bold">
-              すべてのイベントを見る
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ▼▼ リスト表示 ▼▼ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {displayedEvents.map((event, index) => {
-          const statusLabel = getDaysUntil(event.event_date);
-          const posterName = event.profiles?.name || '主催者不明';
-          const posterIcon = event.profiles?.avatar_url;
-          const isKept = keptIds.includes(event.id);
-          const loadingType = index < 3 ? "eager" : "lazy";
-
-          return (
-            <Link key={event.id} href={`/events/${event.id}`} className="block group">
-              <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-200 h-full flex flex-col">
-                
-                {/* 1. 画像エリア (16:9 で横長対応) */}
-                <div className="relative aspect-video bg-gray-100">
-                  {event.image_url ? (
-                    <img 
-                      src={event.image_url} 
-                      alt={event.title} 
-                      loading={loadingType}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Image</div>
-                  )}
-                  
-                  {/* === タグ配置エリア（分散させて重なり防止） === */}
-                  
-                  {/* 左上: カテゴリ */}
-                  {event.category && (
-                    <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-teal-800 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm border border-teal-100">
-                      {event.category}
-                    </span>
-                  )}
-
-                  {/* 右上: カウントダウン */}
-                  {statusLabel && (
-                    <span className="absolute top-3 right-3 bg-rose-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md border-2 border-white">
-                      {statusLabel}
-                    </span>
-                  )}
-
-                  {/* 左下: エリア */}
-                  {event.area && (
-                    <span className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm text-slate-700 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm border border-slate-100 flex items-center gap-1">
-                      📍 {event.area}
-                    </span>
-                  )}
-                </div>
-
-                {/* 2. 情報エリア */}
-                <div className="p-4 flex flex-col flex-grow">
-                  
-                  {/* ★修正: 主催者アイコンを大きく（w-5 -> w-10） */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-200">
-                      {posterIcon ? (
-                        <img src={posterIcon} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-gray-300" />
-                      )}
-                    </div>
-                    {/* 名前も少し大きく太く */}
-                    <span className="text-sm text-gray-700 font-bold truncate">{posterName}</span>
-                  </div>
-
-                  {/* タイトル */}
-                  <h2 className="text-lg font-bold text-gray-900 leading-snug mb-3 line-clamp-2 group-hover:text-blue-800 transition-colors">
-                    {event.title}
-                  </h2>
-
-                  {/* 日付と場所（見やすいアイコン付き） */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <span className="text-xl text-blue-600">📅</span>
-                      <span className="font-bold text-base">{formatDate(event.event_date)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-600">
-                      <span className="text-xl text-red-500">📍</span>
-                      <span className="text-sm truncate">{event.location || '場所の記載なし'}</span>
-                    </div>
-                  </div>
-
-                  {/* 3. アクションボタン */}
-                  <div className="mt-auto pt-3 border-t border-gray-100 flex justify-end gap-2">
-                    <ShareToLine 
-                      title={event.title} 
-                      eventId={event.id} 
-                      variant="modern" 
-                    />
-                    <button
-                      onClick={(e) => toggleKeep(e, event.id)}
-                      className={`
-                        flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors
-                        ${isKept 
-                          ? 'border-pink-500 bg-pink-50 text-pink-600' 
-                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-300'
-                        }
-                      `}
-                    >
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        viewBox="0 0 24 24" 
-                        fill={isKept ? "currentColor" : "none"} 
-                        stroke="currentColor" 
-                        strokeWidth="2" 
-                        className="w-5 h-5"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-                      </svg>
-                      <span className="text-xs font-bold">
-                        {isKept ? '保存済' : '気になる'}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* ページネーション */}
-      {!showKeptOnly && totalPages > 1 && (
-        <div className="flex justify-center items-center gap-4 mt-12 mb-8">
-          {page > 1 ? (
-            <Link 
-              href={`/?page=${page - 1}`}
-              className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-full font-bold shadow-sm hover:bg-slate-50 transition"
-            >
-              前へ
-            </Link>
-          ) : (
-            <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold cursor-not-allowed">
-              前へ
-            </button>
-          )}
-
-          <span className="text-gray-600 font-bold">
-            {page} / {totalPages}
-          </span>
-
-          {page < totalPages ? (
-            <Link 
-              href={`/?page=${page + 1}`}
-              className="px-6 py-3 bg-blue-700 text-white rounded-full font-bold shadow-md hover:bg-blue-800 transition"
-            >
-              次へ
-            </Link>
-          ) : (
-            <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold cursor-not-allowed">
-              次へ
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 </file>
 
@@ -2203,385 +1740,92 @@ export default function ShareToLine({ title, eventId, className = "", variant = 
 }
 </file>
 
-<file path="app/globals.css">
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-</file>
-
-<file path="app/hooks/useAdminDashboard.ts">
+<file path="app/components/Tutorial.tsx">
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { driver } from 'driver.js';
+import 'driver.js/dist/driver.css';
 
-// --- 型定義 ---
-export type Event = {
-  id: number;
-  title: string;
-  event_date: string;
-  poster_id?: string;
-  view_count?: number;
-  is_hidden: boolean;
-  image_url: string | null;
-  category: string | null;
-  profiles: { name: string | null } | null;
+type TutorialProps = {
+  run: boolean;
+  onClose: () => void;
+  isAdmin: boolean;
 };
 
-export type Message = {
-  id: string;
-  content: string;
-  created_at: string;
-  is_read: boolean;
-  sender: { name: string | null } | null;
-};
-
-export type MyProfile = {
-  id: string;
-  role: string;
-  name: string | null;
-  avatar_url: string | null;
-};
-
-export type Application = {
-  id: number;
-  organization_name: string;
-  email: string;
-  activity_details: string;
-  status: 'pending' | 'approved' | 'rejected';
-  created_at: string;
-};
-
-export type Report = {
-  id: number;
-  reason: string;
-  created_at: string;
-  events: { id: number; title: string } | null;
-};
-
-const WORKER_URL = 'https://mail-sender.campustocommunityshizuoka.workers.dev/';
-
-export function useAdminDashboard() {
-  const router = useRouter();
-  
-  // State
-  const [events, setEvents] = useState<Event[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
-  const [isMaintenance, setIsMaintenance] = useState(false); // ★追加: メンテナンス状態
-  
-  const [inviteUrl, setInviteUrl] = useState('');
-  const [showQrCode, setShowQrCode] = useState(false);
-  
-  const [showMailMenu, setShowMailMenu] = useState(false);
-  const [showMessages, setShowMessages] = useState(false);
-  const [showApplications, setShowApplications] = useState(false);
-  const [showReports, setShowReports] = useState(false);
-  const [runTutorial, setRunTutorial] = useState(false);
-
-  // Refs
-  const mailMenuRef = useRef<HTMLDivElement>(null);
-  const messagePanelRef = useRef<HTMLDivElement>(null);
-  const applicationPanelRef = useRef<HTMLDivElement>(null);
-  const reportPanelRef = useRef<HTMLDivElement>(null);
-
-  // データ取得
+export default function Tutorial({ run, onClose, isAdmin }: TutorialProps) {
   useEffect(() => {
-    const fetchData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      setCurrentUserId(user.id);
+    if (run) {
+      const steps = [
+        { 
+          element: '#tutorial-header', 
+          popover: { 
+            title: 'マイページへようこそ', 
+            description: 'ここでは投稿の管理や、運営からのお知らせを確認できます。',
+            side: "bottom" as const,
+            align: 'start' as const
+          } 
+        },
+        { 
+          element: '#tutorial-mail', 
+          popover: { 
+            title: 'メッセージ機能', 
+            description: 'ここから「お知らせ（受信）」の確認や、運営への「メッセージ送信」ができます。未読がある場合はバッジがつきます。',
+            side: "bottom" as const
+          } 
+        },
+        { 
+          element: '#tutorial-create-btn', 
+            popover: { 
+            title: 'イベント作成', 
+            description: 'ここから新しいイベントを投稿できます。',
+            side: "bottom" as const
+          } 
+        },
+        ...(isAdmin ? [
+          { 
+            element: '#tutorial-report', 
+            popover: { 
+              title: '通報・報告', 
+              description: '【管理者機能】ユーザーからの通報内容はここで確認・対応できます。',
+              side: "bottom" as const
+            } 
+          },
+          { 
+            element: '#tutorial-application', 
+            popover: { 
+              title: '新規申請', 
+              description: '【管理者機能】新しい団体の利用申請はここに届きます。',
+              side: "bottom" as const
+            } 
+          }
+        ] : []),
+        { 
+          element: '#tutorial-profile', 
+          popover: { 
+            title: 'プロフィール設定', 
+            // ★変更: HPのURLについて言及
+            description: 'アイコン、名前、団体のホームページURLの設定はこちらから行えます。',
+            side: "left" as const
+          } 
+        },
+      ];
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, role, name, avatar_url')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile) setMyProfile(profile);
-      
-      const role = profile?.role || 'poster';
-      const hasAdminPrivileges = ['admin', 'super_admin'].includes(role);
+      const driverObj = driver({
+        showProgress: true,
+        animate: true,
+        nextBtnText: '次へ',
+        prevBtnText: '戻る',
+        doneBtnText: '完了',
+        onDestroyed: onClose,
+        steps: steps 
+      });
 
-      // ★追加: メンテナンス状態の取得
-      if (role === 'super_admin') {
-        const { data: setting } = await supabase
-          .from('system_settings')
-          .select('value')
-          .eq('key', 'maintenance_mode')
-          .single();
-        if (setting) setIsMaintenance(setting.value === 'true');
-      }
-
-      // イベント取得
-      let query = supabase
-        .from('events')
-        .select(`
-          id, title, event_date, poster_id, view_count, is_hidden, image_url, category,
-          profiles ( name )
-        `)
-        .order('event_date', { ascending: false });
-
-      if (!hasAdminPrivileges) {
-        query = query.eq('poster_id', user.id);
-      }
-
-      const { data: eventsData } = await query;
-      if (eventsData) setEvents(eventsData as unknown as Event[]);
-
-      // メッセージ取得
-      const { data: messagesData } = await supabase
-        .from('messages')
-        .select(`
-          id, content, created_at, is_read,
-          sender:sender_id ( name )
-        `)
-        .eq('receiver_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (messagesData) setMessages(messagesData as unknown as Message[]);
-
-      // 管理者用データ
-      if (hasAdminPrivileges) {
-        const { data: appsData } = await supabase
-          .from('applications')
-          .select('*')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false });
-        if (appsData) setApplications(appsData as Application[]);
-
-        const { data: reportsData } = await supabase
-          .from('reports')
-          .select(`
-            id, reason, created_at,
-            events ( id, title )
-          `)
-          .order('created_at', { ascending: false });
-        if (reportsData) setReports(reportsData as unknown as Report[]);
-      }
-
-      setLoading(false);
-
-      const hasSeenTutorial = localStorage.getItem('hasSeenAdminTutorial_v1');
-      if (!hasSeenTutorial) {
-        setTimeout(() => setRunTutorial(true), 1000);
-      }
-    };
-    fetchData();
-  }, [router]);
-
-  useEffect(() => {
-    setInviteUrl('https://hamamtsu-events.shizuoka-connect.com/api/invite?code=hamamatsu2025secret');
-  }, []);
-
-  // クリック外検知
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (mailMenuRef.current && !mailMenuRef.current.contains(event.target as Node)) setShowMailMenu(false);
-      if (applicationPanelRef.current && !applicationPanelRef.current.contains(event.target as Node)) setShowApplications(false);
-      if (reportPanelRef.current && !reportPanelRef.current.contains(event.target as Node)) setShowReports(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // --- アクション ---
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
-
-  // ★追加: メンテナンス切り替え
-  const toggleMaintenance = async () => {
-    if (myProfile?.role !== 'super_admin') return;
-    
-    const newValue = !isMaintenance;
-    const confirmMessage = newValue 
-      ? "【警告】メンテナンスモードをONにしますか？\n閲覧者がサイトを見られなくなります。"
-      : "メンテナンスモードを解除してサイトを公開しますか？";
-
-    if (!confirm(confirmMessage)) return;
-
-    try {
-      const { error } = await supabase
-        .from('system_settings')
-        .update({ value: String(newValue) })
-        .eq('key', 'maintenance_mode');
-
-      if (error) throw error;
-      
-      setIsMaintenance(newValue);
-      alert(newValue ? "メンテナンスモードに切り替えました。" : "メンテナンスモードを解除しました。");
-    } catch (e) {
-      console.error(e);
-      alert("設定の変更に失敗しました。");
+      driverObj.drive();
     }
-  };
+  }, [run, onClose, isAdmin]);
 
-  const markAsRead = async (messageId: string) => {
-    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', messageId);
-    if (!error) {
-      setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, is_read: true } : msg));
-    }
-  };
-
-  const deleteMessage = async (messageId: string) => {
-    if (!confirm('このメッセージを削除してもよろしいですか？')) return;
-    const { error } = await supabase.from('messages').delete().eq('id', messageId);
-    if (!error) setMessages(prev => prev.filter(msg => msg.id !== messageId));
-  };
-
-  const deleteReport = async (reportId: number) => {
-    if (!confirm('この通報を「対応済み」としてリストから削除しますか？')) return;
-    const { error } = await supabase.from('reports').delete().eq('id', reportId);
-    if (!error) setReports(prev => prev.filter(r => r.id !== reportId));
-  };
-
-  const handleDelete = async (id: number, poster_id?: string, eventTitle?: string) => {
-    if (!window.confirm('本当に削除してもよろしいですか？')) return;
-    
-    let deleteReason = '';
-    const isDeletingOthersPost = poster_id && poster_id !== currentUserId;
-    const hasAdminPrivileges = ['admin', 'super_admin'].includes(myProfile?.role || '');
-
-    if (hasAdminPrivileges && isDeletingOthersPost) {
-      const input = window.prompt('削除の理由を入力してユーザーに通知しますか？\n(空欄のままOKを押すと通知を送らずに削除します)');
-      if (input === null) return;
-      deleteReason = input;
-    }
-
-    try {
-      const targetEvent = events.find(e => e.id === id);
-      if (targetEvent?.image_url) {
-        const filePath = targetEvent.image_url.split('/event-images/')[1];
-        if (filePath) await supabase.storage.from('event-images').remove([decodeURIComponent(filePath)]);
-      }
-
-      const { error } = await supabase.from('events').delete().eq('id', id);
-      if (error) throw error;
-
-      if (deleteReason && poster_id && currentUserId) {
-        await supabase.from('messages').insert({
-          sender_id: currentUserId,
-          receiver_id: poster_id,
-          content: `【重要】あなたの投稿「${eventTitle || '不明なイベント'}」は管理者により削除されました。\n\n理由: ${deleteReason}`
-        });
-        alert("ユーザーに削除理由を通知しました。");
-      }
-
-      setEvents((prev) => prev.filter((e) => e.id !== id));
-      if (!deleteReason) alert('削除しました');
-    } catch (err) {
-      console.error(err);
-      alert('削除エラーが発生しました');
-    }
-  };
-
-  const handleToggleHidden = async (id: number, currentHiddenStatus: boolean, poster_id?: string, eventTitle?: string) => {
-    if (myProfile?.role !== 'super_admin') {
-      alert('この操作は特権管理者のみ可能です。');
-      return;
-    }
-    const newStatus = !currentHiddenStatus;
-    if (!window.confirm(`この投稿を「${newStatus ? '非表示' : '再公開'}」にしますか？`)) return;
-
-    let hideReason = '';
-    if (newStatus === true && poster_id && poster_id !== currentUserId) {
-       const input = window.prompt(`非表示にする理由を入力して通知しますか？`);
-       if (input === null) return;
-       hideReason = input;
-    }
-
-    const { error } = await supabase.from('events').update({ is_hidden: newStatus }).eq('id', id);
-    if (!error) {
-      setEvents(prev => prev.map(e => e.id === id ? { ...e, is_hidden: newStatus } : e));
-      if (hideReason && poster_id && currentUserId) {
-         await supabase.from('messages').insert({
-           sender_id: currentUserId,
-           receiver_id: poster_id,
-           content: `【管理者通知】投稿「${eventTitle}」は非表示に設定されました。\n理由: ${hideReason}`
-         });
-         alert("通知しました。");
-      }
-    }
-  };
-
-  const sendEmailViaWorker = async (toEmail: string, toName: string, subject: string, bodyText: string) => {
-    await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        toEmail, toName, subject,
-        htmlContent: `<p>${toName} 様</p><p>${bodyText.replace(/\n/g, '<br/>')}</p>`
-      })
-    });
-  };
-
-  const handleApprove = async (app: Application) => {
-    if (!confirm(`「${app.organization_name}」を承認しますか？`)) return;
-    const subject = "【浜松イベント情報】利用申請の承認と招待について";
-    const body = `承認いたしました。\n\n▼登録用リンク\n${inviteUrl}\n\nよろしくお願いいたします。`;
-
-    try {
-      await sendEmailViaWorker(app.email, app.organization_name, subject, body);
-      await supabase.from('applications').delete().eq('id', app.id);
-      setApplications(prev => prev.filter(a => a.id !== app.id));
-      alert('承認メールを送信し、完了しました。');
-    } catch (e) {
-      console.error("承認エラー:", e); 
-      alert("自動送信失敗。手動で対応してください。");
-      window.location.href = `mailto:${app.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    }
-  };
-
-  const handleReject = async (id: number, email: string, name: string) => {
-    const reason = window.prompt("却下の理由:", "活動内容が本サイトの趣旨と異なるため");
-    if (reason === null) return;
-    const subject = "【浜松イベント情報】利用申請の結果について";
-    const body = `誠に残念ながら承認を見送らせていただくこととなりました。\n理由: ${reason}`;
-
-    try {
-      await sendEmailViaWorker(email, name, subject, body);
-      await supabase.from('applications').delete().eq('id', id);
-      setApplications(prev => prev.filter(a => a.id !== id));
-      alert('却下メールを送信し、完了しました。');
-    } catch (e) {
-      console.error("却下エラー:", e); 
-      alert("送信失敗。手動で対応してください。");
-      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    }
-  };
-
-  const handleTutorialClose = () => {
-    setRunTutorial(false);
-    localStorage.setItem('hasSeenAdminTutorial_v1', 'true');
-  };
-
-  return {
-    // Data
-    events, messages, applications, reports, loading, myProfile,
-    inviteUrl, currentUserId, isMaintenance, // ★追加
-    // UI State
-    showQrCode, setShowQrCode,
-    showMailMenu, setShowMailMenu,
-    showMessages, setShowMessages,
-    showApplications, setShowApplications,
-    showReports, setShowReports,
-    runTutorial, setRunTutorial,
-    // Refs
-    mailMenuRef, messagePanelRef, applicationPanelRef, reportPanelRef,
-    // Actions
-    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose, toggleMaintenance // ★追加
-  };
+  return null;
 }
 </file>
 
@@ -2894,6 +2138,333 @@ export const config = {
 }
 </file>
 
+<file path="app/admin/profile/page.tsx">
+'use client';
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import imageCompression from 'browser-image-compression';
+
+export default function ProfileEditPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  
+  const [name, setName] = useState('');
+  // ★追加: ホームページURLステート
+  const [websiteUrl, setWebsiteUrl] = useState('');
+
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
+  const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
+  const [mySearchId, setMySearchId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('name, avatar_url, search_id, website_url') // ★追加: website_urlを取得
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error(error);
+      } else if (data) {
+        setName(data.name || '');
+        setCurrentAvatarUrl(data.avatar_url);
+        setMySearchId(data.search_id);
+        // ★追加: 取得したURLをセット
+        setWebsiteUrl(data.website_url || '');
+      }
+      setLoading(false);
+    };
+
+    fetchProfile();
+  }, [router]);
+
+  // URLからファイルパスを抽出するヘルパー関数
+  const getFilePathFromUrl = (url: string) => {
+    try {
+      const parts = url.split('/profile-images/');
+      if (parts.length > 1) {
+        return decodeURIComponent(parts[1]);
+      }
+      return null;
+    } catch (e) {
+      console.error('パス解析エラー', e);
+      return null;
+    }
+  };
+
+  const generateSearchId = (str: string) => {
+    return str
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[\s\t_.\-,]/g, '')
+      .replace(/ン/g, 'ソ')
+      .replace(/シ/g, 'ツ')
+      .replace(/口/g, 'ロ')
+      .replace(/ー/g, '-');
+  };
+
+  const uploadAvatar = async (file: File) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user');
+
+      console.log(`アイコン圧縮前: ${(file.size / 1024).toFixed(2)} KB`);
+
+      const options = {
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 800,
+        useWebWorker: true,
+        initialQuality: 0.7,
+      };
+
+      const compressedFile = await imageCompression(file, options);
+      console.log(`アイコン圧縮後: ${(compressedFile.size / 1024).toFixed(2)} KB`);
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images') 
+        .upload(filePath, compressedFile, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+
+    } catch (error) {
+      console.error('アイコン画像の処理エラー:', error);
+      throw error;
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      alert('名前は必須です');
+      return;
+    }
+    setUpdating(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+
+      const newSearchId = generateSearchId(name);
+
+      if (newSearchId.length < 2) {
+        alert('名前が短すぎます。記号などを除いて2文字以上にしてください。');
+        setUpdating(false);
+        return;
+      }
+
+      if (newSearchId !== mySearchId) {
+        const { data: isExists, error: rpcError } = await supabase
+          .rpc('check_search_id_exists', { target_id: newSearchId });
+
+        if (rpcError) throw rpcError;
+
+        if (isExists) {
+          alert('この名前（または酷似した名前）は既に使用されています。\n別の名前を入力してください。');
+          setUpdating(false);
+          return;
+        }
+      }
+
+      let avatarUrl = currentAvatarUrl;
+      
+      // 新しい画像が選択されている場合
+      if (newAvatarFile) {
+        avatarUrl = await uploadAvatar(newAvatarFile);
+
+        if (currentAvatarUrl) {
+          const oldFilePath = getFilePathFromUrl(currentAvatarUrl);
+          if (oldFilePath) {
+            const { error: deleteError } = await supabase.storage
+              .from('profile-images')
+              .remove([oldFilePath]);
+            
+            if (deleteError) {
+              console.error('旧アイコン削除失敗:', deleteError);
+            } else {
+              console.log('旧アイコンを削除しました:', oldFilePath);
+            }
+          }
+        }
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: name,
+          avatar_url: avatarUrl,
+          search_id: newSearchId,
+          website_url: websiteUrl, // ★追加: URLを保存
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setMySearchId(newSearchId);
+      setCurrentAvatarUrl(avatarUrl); 
+      setNewAvatarFile(null);
+
+      alert('プロフィールを更新しました！');
+      router.push('/admin');
+
+    } catch (error) {
+      console.error(error);
+      alert('更新に失敗しました');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('【警告】本当にアカウントを削除しますか？\n\n投稿したイベント、メッセージ、画像など全てのデータが完全に削除され、復元することはできません。')) {
+      return;
+    }
+    
+    if (!window.confirm('本当によろしいですか？この操作は取り消せません。')) {
+      return;
+    }
+
+    setUpdating(true);
+
+    try {
+      const { error } = await supabase.rpc('delete_own_account');
+
+      if (error) throw error;
+
+      await supabase.auth.signOut();
+      alert('アカウントを削除しました。ご利用ありがとうございました。');
+      router.push('/');
+
+    } catch (error) {
+      console.error('削除エラー:', error);
+      alert('アカウントの削除に失敗しました。時間をおいて再度お試しください。');
+      setUpdating(false);
+    }
+  };
+
+  if (loading) return <div className="p-10">読み込み中...</div>;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-xl mx-auto bg-white p-8 rounded-lg shadow">
+        <h1 className="text-2xl font-bold mb-6">プロフィールの編集</h1>
+        
+        <form onSubmit={handleSave} className="space-y-6">
+          {/* アイコン設定 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">アイコン画像</label>
+            <div className="flex items-center gap-6">
+              <div className="w-20 h-20 rounded-full bg-gray-200 border overflow-hidden flex-shrink-0 relative">
+                {newAvatarFile ? (
+                  <img src={URL.createObjectURL(newAvatarFile)} className="w-full h-full object-cover" alt="New Avatar" />
+                ) : currentAvatarUrl ? (
+                  <img src={currentAvatarUrl} className="w-full h-full object-cover" alt="Current Avatar" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Img</div>
+                )}
+              </div>
+              
+              <div className="flex-1">
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={(e) => setNewAvatarFile(e.target.files?.[0] || null)}
+                  className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer w-full"
+                />
+                <p className="text-xs text-gray-400 mt-2">※画像は自動的に軽量化されます</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 名前設定 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">団体名・表示名 <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              placeholder="例：浜松老人会"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              ※すでに存在する名前や、紛らわしい名前には変更できません。
+            </p>
+          </div>
+
+          {/* ★追加: ホームページURL入力欄 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              団体のホームページURL <span className="text-gray-400 font-normal text-xs">(任意)</span>
+            </label>
+            <input 
+              type="url" 
+              value={websiteUrl} 
+              onChange={(e) => setWebsiteUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              イベント詳細ページにリンクが表示されます。SNSのURLでもOKです。
+            </p>
+          </div>
+
+          {/* ボタン */}
+          <div className="flex gap-4 pt-4 pb-8 border-b border-gray-200">
+            <Link href="/admin" className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-gray-700">
+              キャンセル
+            </Link>
+            <button
+              type="submit"
+              disabled={updating}
+              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-bold disabled:opacity-50"
+            >
+              {updating ? '保存中...' : '変更を保存する'}
+            </button>
+          </div>
+        </form>
+
+        {/* アカウント削除エリア */}
+        <div className="mt-8 pt-4">
+          <h3 className="text-sm font-bold text-gray-900 mb-2">アカウントの管理</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            一度アカウントを削除すると、投稿したイベントやメッセージなど全てのデータが消去され、元に戻すことはできません。
+          </p>
+          <button
+            onClick={handleDeleteAccount}
+            disabled={updating}
+            className="text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 px-4 py-2 rounded text-sm font-bold w-full md:w-auto"
+          >
+            アカウントを削除する
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="app/auth/callback/route.ts">
 // app/auth/callback/route.ts
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
@@ -2952,6 +2523,277 @@ export async function GET(request: NextRequest) {
 }
 </file>
 
+<file path="app/components/EventList.tsx">
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { formatDate, getDaysUntil } from '@/lib/utils';
+import ShareToLine from '@/app/components/ShareToLine';
+
+type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  location: string | null;
+  area: string | null;
+  category: string | null;
+  image_url: string | null;
+  // ▼▼▼ 追加: タグの型定義 ▼▼▼
+  tags: string[] | null;
+  profiles: {
+    name: string | null;
+    avatar_url: string | null;
+  } | null;
+};
+
+type Props = {
+  events: Event[];
+  page: number;
+  totalPages: number;
+};
+
+export default function EventList({ events, page, totalPages }: Props) {
+  const [keptIds, setKeptIds] = useState<number[]>([]);
+  const [showKeptOnly, setShowKeptOnly] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('hamamatsu_event_keeps_v1');
+    if (saved) {
+      try {
+        setKeptIds(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse keeps', e);
+      }
+    }
+    setIsLoaded(true);
+  }, []);
+
+  const toggleKeep = (e: React.MouseEvent, id: number) => {
+    e.preventDefault();
+    let newIds;
+    if (keptIds.includes(id)) {
+      newIds = keptIds.filter(keepId => keepId !== id);
+    } else {
+      newIds = [...keptIds, id];
+    }
+    setKeptIds(newIds);
+    localStorage.setItem('hamamatsu_event_keeps_v1', JSON.stringify(newIds));
+  };
+
+  const displayedEvents = showKeptOnly
+    ? events.filter(event => keptIds.includes(event.id))
+    : events;
+
+  if (!isLoaded) return null;
+
+  return (
+    <div>
+      {/* タブ切り替え */}
+      <div className="flex justify-center mb-8">
+        <div className="bg-white p-1 rounded-full shadow-sm border border-gray-200 inline-flex">
+          <button
+            onClick={() => setShowKeptOnly(false)}
+            className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${
+              !showKeptOnly ? 'bg-slate-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            一覧
+          </button>
+          <button
+            onClick={() => setShowKeptOnly(true)}
+            className={`px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-1 ${
+              showKeptOnly ? 'bg-pink-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            <span>♥</span> 気になる ({events.filter(e => keptIds.includes(e.id)).length})
+          </button>
+        </div>
+      </div>
+
+      {displayedEvents.length === 0 && (
+        <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+          <p className="text-lg text-gray-500">表示できるイベントがありません</p>
+          {showKeptOnly && (
+            <button onClick={() => setShowKeptOnly(false)} className="text-blue-600 underline mt-4 text-sm font-bold">
+              すべてのイベントを見る
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ▼▼ リスト表示 ▼▼ */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {displayedEvents.map((event, index) => {
+          const statusLabel = getDaysUntil(event.event_date);
+          const posterName = event.profiles?.name || '主催者不明';
+          const posterIcon = event.profiles?.avatar_url;
+          const isKept = keptIds.includes(event.id);
+          const loadingType = index < 3 ? "eager" : "lazy";
+
+          return (
+            <Link key={event.id} href={`/events/${event.id}`} className="block group">
+              <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-200 h-full flex flex-col">
+                
+                {/* 1. 画像エリア (16:9 で横長対応) */}
+                <div className="relative aspect-video bg-gray-100">
+                  {event.image_url ? (
+                    <img 
+                      src={event.image_url} 
+                      alt={event.title} 
+                      loading={loadingType}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">No Image</div>
+                  )}
+                  
+                  {/* === タグ配置エリア（分散させて重なり防止） === */}
+                  
+                  {/* 左上: カテゴリ */}
+                  {event.category && (
+                    <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-teal-800 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm border border-teal-100">
+                      {event.category}
+                    </span>
+                  )}
+
+                  {/* 右上: カウントダウン */}
+                  {statusLabel && (
+                    <span className="absolute top-3 right-3 bg-rose-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md border-2 border-white">
+                      {statusLabel}
+                    </span>
+                  )}
+
+                  {/* 左下: エリア */}
+                  {event.area && (
+                    <span className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm text-slate-700 text-xs font-bold px-2.5 py-1 rounded-md shadow-sm border border-slate-100 flex items-center gap-1">
+                      📍 {event.area}
+                    </span>
+                  )}
+                </div>
+
+                {/* 2. 情報エリア */}
+                <div className="p-4 flex flex-col flex-grow">
+                  
+                  {/* 主催者アイコン */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-200">
+                      {posterIcon ? (
+                        <img src={posterIcon} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-gray-300" />
+                      )}
+                    </div>
+                    <span className="text-sm text-gray-700 font-bold truncate">{posterName}</span>
+                  </div>
+
+                  {/* ▼▼▼ 追加: ハッシュタグ表示（タイトル上、灰色） ▼▼▼ */}
+                  {event.tags && event.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-1">
+                      {event.tags.map((tag, idx) => (
+                        <span key={idx} className="text-xs font-bold text-gray-400">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* タイトル */}
+                  <h2 className="text-lg font-bold text-gray-900 leading-snug mb-3 line-clamp-2 group-hover:text-blue-800 transition-colors">
+                    {event.title}
+                  </h2>
+
+                  {/* 日付と場所（見やすいアイコン付き） */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-2 text-slate-700">
+                      <span className="text-xl text-blue-600">📅</span>
+                      <span className="font-bold text-base">{formatDate(event.event_date)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <span className="text-xl text-red-500">📍</span>
+                      <span className="text-sm truncate">{event.location || '場所の記載なし'}</span>
+                    </div>
+                  </div>
+
+                  {/* 3. アクションボタン */}
+                  <div className="mt-auto pt-3 border-t border-gray-100 flex justify-end gap-2">
+                    <ShareToLine 
+                      title={event.title} 
+                      eventId={event.id} 
+                      variant="modern" 
+                    />
+                    <button
+                      onClick={(e) => toggleKeep(e, event.id)}
+                      className={`
+                        flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors
+                        ${isKept 
+                          ? 'border-pink-500 bg-pink-50 text-pink-600' 
+                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-300'
+                        }
+                      `}
+                    >
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        viewBox="0 0 24 24" 
+                        fill={isKept ? "currentColor" : "none"} 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        className="w-5 h-5"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                      </svg>
+                      <span className="text-xs font-bold">
+                        {isKept ? '保存済' : '気になる'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* ページネーション */}
+      {!showKeptOnly && totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 mt-12 mb-8">
+          {page > 1 ? (
+            <Link 
+              href={`/?page=${page - 1}`}
+              className="px-6 py-3 bg-white text-slate-700 border border-slate-300 rounded-full font-bold shadow-sm hover:bg-slate-50 transition"
+            >
+              前へ
+            </Link>
+          ) : (
+            <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold cursor-not-allowed">
+              前へ
+            </button>
+          )}
+
+          <span className="text-gray-600 font-bold">
+            {page} / {totalPages}
+          </span>
+
+          {page < totalPages ? (
+            <Link 
+              href={`/?page=${page + 1}`}
+              className="px-6 py-3 bg-blue-700 text-white rounded-full font-bold shadow-md hover:bg-blue-800 transition"
+            >
+              次へ
+            </Link>
+          ) : (
+            <button disabled className="px-6 py-3 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold cursor-not-allowed">
+              次へ
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
 <file path="app/components/PostButton.tsx">
 'use client';
 
@@ -2985,6 +2827,414 @@ export default function PostButton() {
       <span className="text-base">投稿する</span>
     </button>
   );
+}
+</file>
+
+<file path="app/globals.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ▼▼▼ 追加: ふわっと浮き上がるアニメーション定義 ▼▼▼ */
+@layer utilities {
+  .animate-fade-in-up {
+    animation: fadeInUp 1s ease-out forwards;
+    opacity: 0; /* 初期状態は透明 */
+  }
+
+  /* 遅延用のクラス */
+  .animation-delay-200 {
+    animation-delay: 0.2s;
+  }
+  .animation-delay-400 {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+</file>
+
+<file path="app/hooks/useAdminDashboard.ts">
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
+
+// --- 型定義 ---
+export type Event = {
+  id: number;
+  title: string;
+  event_date: string;
+  poster_id?: string;
+  view_count?: number;
+  is_hidden: boolean;
+  image_url: string | null;
+  category: string | null;
+  profiles: { name: string | null } | null;
+};
+
+export type Message = {
+  id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+  sender: { name: string | null } | null;
+};
+
+export type MyProfile = {
+  id: string;
+  role: string;
+  name: string | null;
+  avatar_url: string | null;
+};
+
+export type Application = {
+  id: number;
+  organization_name: string;
+  email: string;
+  activity_details: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+};
+
+export type Report = {
+  id: number;
+  reason: string;
+  created_at: string;
+  events: { id: number; title: string } | null;
+};
+
+const WORKER_URL = 'https://mail-sender.campustocommunityshizuoka.workers.dev/';
+
+// ★変更: チュートリアルのバージョンキーを更新
+const TUTORIAL_KEY = 'hasSeenAdminTutorial_v2';
+
+export function useAdminDashboard() {
+  const router = useRouter();
+  
+  // State
+  const [events, setEvents] = useState<Event[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [myProfile, setMyProfile] = useState<MyProfile | null>(null);
+  const [isMaintenance, setIsMaintenance] = useState(false);
+  
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [showQrCode, setShowQrCode] = useState(false);
+  
+  const [showMailMenu, setShowMailMenu] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
+  const [showApplications, setShowApplications] = useState(false);
+  const [showReports, setShowReports] = useState(false);
+  const [runTutorial, setRunTutorial] = useState(false);
+
+  // Refs
+  const mailMenuRef = useRef<HTMLDivElement>(null);
+  const messagePanelRef = useRef<HTMLDivElement>(null);
+  const applicationPanelRef = useRef<HTMLDivElement>(null);
+  const reportPanelRef = useRef<HTMLDivElement>(null);
+
+  // データ取得
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      setCurrentUserId(user.id);
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, role, name, avatar_url')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile) setMyProfile(profile);
+      
+      const role = profile?.role || 'poster';
+      const hasAdminPrivileges = ['admin', 'super_admin'].includes(role);
+
+      if (role === 'super_admin') {
+        const { data: setting } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'maintenance_mode')
+          .single();
+        if (setting) setIsMaintenance(setting.value === 'true');
+      }
+
+      // イベント取得
+      let query = supabase
+        .from('events')
+        .select(`
+          id, title, event_date, poster_id, view_count, is_hidden, image_url, category,
+          profiles ( name )
+        `)
+        .order('event_date', { ascending: false });
+
+      if (!hasAdminPrivileges) {
+        query = query.eq('poster_id', user.id);
+      }
+
+      const { data: eventsData } = await query;
+      if (eventsData) setEvents(eventsData as unknown as Event[]);
+
+      // メッセージ取得
+      const { data: messagesData } = await supabase
+        .from('messages')
+        .select(`
+          id, content, created_at, is_read,
+          sender:sender_id ( name )
+        `)
+        .eq('receiver_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (messagesData) setMessages(messagesData as unknown as Message[]);
+
+      // 管理者用データ
+      if (hasAdminPrivileges) {
+        const { data: appsData } = await supabase
+          .from('applications')
+          .select('*')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+        if (appsData) setApplications(appsData as Application[]);
+
+        const { data: reportsData } = await supabase
+          .from('reports')
+          .select(`
+            id, reason, created_at,
+            events ( id, title )
+          `)
+          .order('created_at', { ascending: false });
+        if (reportsData) setReports(reportsData as unknown as Report[]);
+      }
+
+      setLoading(false);
+
+      // ★変更: 定数化したキーを使用
+      const hasSeenTutorial = localStorage.getItem(TUTORIAL_KEY);
+      if (!hasSeenTutorial) {
+        setTimeout(() => setRunTutorial(true), 1000);
+      }
+    };
+    fetchData();
+  }, [router]);
+
+  useEffect(() => {
+    setInviteUrl('https://hamamtsu-events.shizuoka-connect.com/api/invite?code=hamamatsu2025secret');
+  }, []);
+
+  // クリック外検知
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mailMenuRef.current && !mailMenuRef.current.contains(event.target as Node)) setShowMailMenu(false);
+      if (applicationPanelRef.current && !applicationPanelRef.current.contains(event.target as Node)) setShowApplications(false);
+      if (reportPanelRef.current && !reportPanelRef.current.contains(event.target as Node)) setShowReports(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // --- アクション ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  const toggleMaintenance = async () => {
+    if (myProfile?.role !== 'super_admin') return;
+    
+    const newValue = !isMaintenance;
+    const confirmMessage = newValue 
+      ? "【警告】メンテナンスモードをONにしますか？\n閲覧者がサイトを見られなくなります。"
+      : "メンテナンスモードを解除してサイトを公開しますか？";
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ value: String(newValue) })
+        .eq('key', 'maintenance_mode');
+
+      if (error) throw error;
+      
+      setIsMaintenance(newValue);
+      alert(newValue ? "メンテナンスモードに切り替えました。" : "メンテナンスモードを解除しました。");
+    } catch (e) {
+      console.error(e);
+      alert("設定の変更に失敗しました。");
+    }
+  };
+
+  const markAsRead = async (messageId: string) => {
+    const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', messageId);
+    if (!error) {
+      setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, is_read: true } : msg));
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!confirm('このメッセージを削除してもよろしいですか？')) return;
+    const { error } = await supabase.from('messages').delete().eq('id', messageId);
+    if (!error) setMessages(prev => prev.filter(msg => msg.id !== messageId));
+  };
+
+  const deleteReport = async (reportId: number) => {
+    if (!confirm('この通報を「対応済み」としてリストから削除しますか？')) return;
+    const { error } = await supabase.from('reports').delete().eq('id', reportId);
+    if (!error) setReports(prev => prev.filter(r => r.id !== reportId));
+  };
+
+  const handleDelete = async (id: number, poster_id?: string, eventTitle?: string) => {
+    if (!window.confirm('本当に削除してもよろしいですか？')) return;
+    
+    let deleteReason = '';
+    const isDeletingOthersPost = poster_id && poster_id !== currentUserId;
+    const hasAdminPrivileges = ['admin', 'super_admin'].includes(myProfile?.role || '');
+
+    if (hasAdminPrivileges && isDeletingOthersPost) {
+      const input = window.prompt('削除の理由を入力してユーザーに通知しますか？\n(空欄のままOKを押すと通知を送らずに削除します)');
+      if (input === null) return;
+      deleteReason = input;
+    }
+
+    try {
+      const targetEvent = events.find(e => e.id === id);
+      if (targetEvent?.image_url) {
+        const filePath = targetEvent.image_url.split('/event-images/')[1];
+        if (filePath) await supabase.storage.from('event-images').remove([decodeURIComponent(filePath)]);
+      }
+
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) throw error;
+
+      if (deleteReason && poster_id && currentUserId) {
+        await supabase.from('messages').insert({
+          sender_id: currentUserId,
+          receiver_id: poster_id,
+          content: `【重要】あなたの投稿「${eventTitle || '不明なイベント'}」は管理者により削除されました。\n\n理由: ${deleteReason}`
+        });
+        alert("ユーザーに削除理由を通知しました。");
+      }
+
+      setEvents((prev) => prev.filter((e) => e.id !== id));
+      if (!deleteReason) alert('削除しました');
+    } catch (err) {
+      console.error(err);
+      alert('削除エラーが発生しました');
+    }
+  };
+
+  const handleToggleHidden = async (id: number, currentHiddenStatus: boolean, poster_id?: string, eventTitle?: string) => {
+    if (myProfile?.role !== 'super_admin') {
+      alert('この操作は特権管理者のみ可能です。');
+      return;
+    }
+    const newStatus = !currentHiddenStatus;
+    if (!window.confirm(`この投稿を「${newStatus ? '非表示' : '再公開'}」にしますか？`)) return;
+
+    let hideReason = '';
+    if (newStatus === true && poster_id && poster_id !== currentUserId) {
+       const input = window.prompt(`非表示にする理由を入力して通知しますか？`);
+       if (input === null) return;
+       hideReason = input;
+    }
+
+    const { error } = await supabase.from('events').update({ is_hidden: newStatus }).eq('id', id);
+    if (!error) {
+      setEvents(prev => prev.map(e => e.id === id ? { ...e, is_hidden: newStatus } : e));
+      if (hideReason && poster_id && currentUserId) {
+         await supabase.from('messages').insert({
+           sender_id: currentUserId,
+           receiver_id: poster_id,
+           content: `【管理者通知】投稿「${eventTitle}」は非表示に設定されました。\n理由: ${hideReason}`
+         });
+         alert("通知しました。");
+      }
+    }
+  };
+
+  const sendEmailViaWorker = async (toEmail: string, toName: string, subject: string, bodyText: string) => {
+    await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toEmail, toName, subject,
+        htmlContent: `<p>${toName} 様</p><p>${bodyText.replace(/\n/g, '<br/>')}</p>`
+      })
+    });
+  };
+
+  const handleApprove = async (app: Application) => {
+    if (!confirm(`「${app.organization_name}」を承認しますか？`)) return;
+    const subject = "【浜松イベント情報】利用申請の承認と招待について";
+    const body = `承認いたしました。\n\n▼登録用リンク\n${inviteUrl}\n\nよろしくお願いいたします。`;
+
+    try {
+      await sendEmailViaWorker(app.email, app.organization_name, subject, body);
+      await supabase.from('applications').delete().eq('id', app.id);
+      setApplications(prev => prev.filter(a => a.id !== app.id));
+      alert('承認メールを送信し、完了しました。');
+    } catch (e) {
+      console.error("承認エラー:", e); 
+      alert("自動送信失敗。手動で対応してください。");
+      window.location.href = `mailto:${app.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+  };
+
+  const handleReject = async (id: number, email: string, name: string) => {
+    const reason = window.prompt("却下の理由:", "活動内容が本サイトの趣旨と異なるため");
+    if (reason === null) return;
+    const subject = "【浜松イベント情報】利用申請の結果について";
+    const body = `誠に残念ながら承認を見送らせていただくこととなりました。\n理由: ${reason}`;
+
+    try {
+      await sendEmailViaWorker(email, name, subject, body);
+      await supabase.from('applications').delete().eq('id', id);
+      setApplications(prev => prev.filter(a => a.id !== id));
+      alert('却下メールを送信し、完了しました。');
+    } catch (e) {
+      console.error("却下エラー:", e); 
+      alert("送信失敗。手動で対応してください。");
+      window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+  };
+
+  const handleTutorialClose = () => {
+    setRunTutorial(false);
+    // ★変更: 定数化したキーを使用
+    localStorage.setItem(TUTORIAL_KEY, 'true');
+  };
+
+  return {
+    events, messages, applications, reports, loading, myProfile,
+    inviteUrl, currentUserId, isMaintenance,
+    showQrCode, setShowQrCode,
+    showMailMenu, setShowMailMenu,
+    showMessages, setShowMessages,
+    showApplications, setShowApplications,
+    showReports, setShowReports,
+    runTutorial, setRunTutorial,
+    mailMenuRef, messagePanelRef, applicationPanelRef, reportPanelRef,
+    handleLogout, markAsRead, deleteMessage, deleteReport, handleDelete, handleToggleHidden, handleApprove, handleReject, handleTutorialClose, toggleMaintenance
+  };
 }
 </file>
 
@@ -3026,72 +3276,6 @@ export default function RootLayout({
     </html>
   );
 }
-</file>
-
-<file path="next.config.mjs">
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  poweredByHeader: false,
-  // ▼▼▼ 既存の設定（ビルドエラー無視など） ▼▼▼
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
-  },
-  // ▲▲▲ ここまで ▲▲▲
-
-  // ▼▼▼ ★ここから追加：セキュリティヘッダーの設定 ▼▼▼
-  async headers() {
-    return [
-      {
-        // 全てのページに適用
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-DNS-Prefetch-Control',
-            value: 'on'
-          },
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload'
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'SAMEORIGIN' // 自分のサイト以外での埋め込みを禁止
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff' // ファイル形式の偽装を防止
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin' // リンク遷移時の情報漏洩防止
-          },
-          {
-            // CSP（コンテンツセキュリティポリシー）
-            // 許可するもの：自分自身(self)、Supabaseの画像、Googleマップ、インラインスタイルなど
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self';",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.google.com https://*.gstatic.com;", 
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
-              "img-src 'self' blob: data: https://*.supabase.co https://*.googleusercontent.com https://*.google.com;",
-              "font-src 'self' data: https://fonts.gstatic.com;",
-              "frame-src 'self' https://*.google.com https://*.googleusercontent.com;",
-              "connect-src 'self' https://*.supabase.co https://*.googleapis.com;"
-            ].join(' ').replace(/\s{2,}/g, ' ').trim()
-          }
-        ],
-      },
-    ];
-  },
-};
-
-export default nextConfig;
 </file>
 
 <file path="app/api/cleanup-images/route.ts">
@@ -3314,6 +3498,503 @@ export default function LoginPage() {
 }
 </file>
 
+<file path="next.config.mjs">
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  poweredByHeader: false,
+  // ▼▼▼ 既存の設定（ビルドエラー無視など） ▼▼▼
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  images: {
+    unoptimized: true,
+  },
+  // ▲▲▲ ここまで ▲▲▲
+
+  // ▼▼▼ ★ここから追加：セキュリティヘッダーの設定 ▼▼▼
+  async headers() {
+    return [
+      {
+        // 全てのページに適用
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on'
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN' // 自分のサイト以外での埋め込みを禁止
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff' // ファイル形式の偽装を防止
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin' // リンク遷移時の情報漏洩防止
+          },
+          {
+            // CSP（コンテンツセキュリティポリシー）
+            // 許可するもの：自分自身(self)、Supabaseの画像、Googleマップ、インラインスタイルなど
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self';",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.google.com https://*.gstatic.com;", 
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
+              "img-src 'self' blob: data: https://*.supabase.co https://*.googleusercontent.com https://*.google.com;",
+              "font-src 'self' data: https://fonts.gstatic.com;",
+              "frame-src 'self' https://*.google.com https://*.googleusercontent.com;",
+              // ★修正箇所：Cloudflare Workers (https://*.workers.dev) への通信を許可に追加
+              "connect-src 'self' https://*.supabase.co https://*.googleapis.com https://*.workers.dev;"
+            ].join(' ').replace(/\s{2,}/g, ' ').trim()
+          }
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+</file>
+
+<file path=".github/workflows/cleanup.yml">
+name: Cleanup Old Images
+
+on:
+  schedule:
+    # 日本時間 16:10 (UTC 07:10) に実行
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Cleanup API
+        run: |
+          curl --fail -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
+</file>
+
+<file path="app/admin/edit/[id]/page.tsx">
+'use client';
+
+export const runtime = 'edge';
+
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import imageCompression from 'browser-image-compression';
+
+const AREA_OPTIONS = [
+  "中央区（旧中区）",
+  "中央区（旧東区）",
+  "中央区（旧西区）",
+  "中央区（旧南区）",
+  "中央区（旧北区・三方原）",
+  "浜名区（旧浜北区）",
+  "浜名区（旧北区）",
+  "天竜区（旧天竜区）"
+];
+
+const CATEGORY_OPTIONS = [
+  "お祭り・マルシェ",
+  "音楽・ライブ",
+  "スポーツ・運動",
+  "学び・講座",
+  "ボランティア",
+  "子育て・子供向け",
+  "展示・芸術",
+  "その他"
+];
+
+// タグ設定
+const MAX_TAGS = 4;
+const COMMON_TAGS = ["無料", "雨でもOK", "予約不要", "当日参加可"];
+const CATEGORY_TAGS: Record<string, string[]> = {
+  "お祭り・マルシェ": ["食べ歩き", "地産地消", "縁日"],
+  "音楽・ライブ": ["生演奏", "野外フェス", "観覧無料"],
+  "スポーツ・運動": ["初心者歓迎", "体験会", "ヨガ"],
+  "学び・講座": ["ワークショップ", "自然観察", "歴史"],
+  "ボランティア": ["地域貢献", "ゴミ拾い", "初心者OK"],
+  "子育て・子供向け": ["ベビーカーOK", "授乳室あり", "読み聞かせ"],
+  "展示・芸術": ["写真展", "アート", "入場無料"],
+  "その他": ["交流会", "相談会"]
+};
+
+const IMAGE_UPDATE_LIMIT = 2;
+
+export default function EditEventPage() {
+  const router = useRouter();
+  const params = useParams();
+  const id = params.id; 
+
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
+  const [area, setArea] = useState('');
+  const [date, setDate] = useState('');
+  const [location, setLocation] = useState('');
+  const [phone, setPhone] = useState('');
+  const [description, setDescription] = useState('');
+  
+  // タグ関連ステート
+  const [tags, setTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
+  
+  const [posterId, setPosterId] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [imageUpdateCount, setImageUpdateCount] = useState<number>(0);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    const fetchEventAndProfile = async () => {
+      if (!id) return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+          if (profile) setMyRole(profile.role);
+        }
+        const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
+        if (error) throw error;
+        if (data) {
+          setTitle(data.title || '');
+          setCategory(data.category || '');
+          setArea(data.area || '');
+          setDate(data.event_date || '');
+          setLocation(data.location || '');
+          setPhone(data.contact_phone || '');
+          setDescription(data.description || '');
+          setCurrentImageUrl(data.image_url);
+          setPosterId(data.poster_id);
+          setImageUpdateCount(data.image_update_count || 0);
+          setTags(data.tags || []); // タグをセット
+        }
+      } catch (error) {
+        console.error('データ取得エラー:', error);
+        router.push('/admin');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEventAndProfile();
+  }, [id, router]);
+
+  const getFilePathFromUrl = (url: string) => {
+    try {
+      const parts = url.split('/event-images/');
+      if (parts.length > 1) {
+        return decodeURIComponent(parts[1]);
+      }
+      return null;
+    } catch (e) {
+      console.error('パス解析エラー', e);
+      return null;
+    }
+  };
+
+  const uploadImage = async (file: File) => {
+    try {
+      console.log(`圧縮前: ${(file.size / 1024).toFixed(2)} KB`);
+      const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.7 };
+      const compressedFile = await imageCompression(file, options);
+      console.log(`圧縮後: ${(compressedFile.size / 1024).toFixed(2)} KB`);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${fileName}`;
+      const { error: uploadError } = await supabase.storage.from('event-images').upload(filePath, compressedFile);
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('event-images').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (error) {
+      console.error('画像アップロードエラー:', error);
+      throw new Error('画像の圧縮またはアップロードに失敗しました');
+    }
+  };
+
+  // タグ追加処理
+  const addTag = (tagToAdd: string) => {
+    const trimmedTag = tagToAdd.trim();
+    if (!trimmedTag) return;
+    if (tags.length >= MAX_TAGS) return;
+    if (tags.includes(trimmedTag)) return;
+    setTags([...tags, trimmedTag]);
+  };
+
+  // タグ削除処理
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
+
+  // カスタムタグ追加
+  const handleCustomTagAdd = (e: React.KeyboardEvent<HTMLInputElement> | React.MouseEvent) => {
+    if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
+    e.preventDefault();
+    if (customTagInput) {
+      addTag(customTagInput);
+      setCustomTagInput('');
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !date || !area || !category) { alert('活動名、カテゴリ、地域、開催日は必須です'); return; }
+    
+    const hasAdminPrivileges = ['admin', 'super_admin'].includes(myRole || '');
+    if (newImageFile && !hasAdminPrivileges && imageUpdateCount >= IMAGE_UPDATE_LIMIT) {
+      alert(`このイベントの写真は既に${IMAGE_UPDATE_LIMIT}回変更されているため、これ以上変更できません。`);
+      return;
+    }
+    if (!confirm('この内容で更新しますか？')) return;
+
+    let editReason = '';
+    const isEditingOthersPost = posterId && posterId !== currentUserId;
+    if (hasAdminPrivileges && isEditingOthersPost) {
+      const input = window.prompt('【管理者操作】編集理由を入力（空欄OK）');
+      if (input === null) return;
+      editReason = input;
+    }
+
+    setUpdating(true);
+
+    try {
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      if (authError || !session) throw new Error('ログインセッションが切れました。');
+
+      let imageUrl = currentImageUrl;
+      let nextImageUpdateCount = imageUpdateCount;
+
+      if (newImageFile) {
+        imageUrl = await uploadImage(newImageFile);
+        nextImageUpdateCount = imageUpdateCount + 1;
+
+        if (currentImageUrl) {
+          const oldFilePath = getFilePathFromUrl(currentImageUrl);
+          if (oldFilePath) {
+            const { error: deleteError } = await supabase.storage
+              .from('event-images')
+              .remove([oldFilePath]);
+            
+            if (deleteError) console.error('旧画像削除失敗:', deleteError);
+          }
+        }
+      }
+
+      const { error: updateError } = await supabase
+        .from('events')
+        .update({
+          title, 
+          category,
+          area, 
+          event_date: date, 
+          location, 
+          contact_phone: phone,
+          description, 
+          image_url: imageUrl, 
+          image_update_count: nextImageUpdateCount,
+          updated_at: new Date().toISOString(),
+          tags: tags, // タグを更新
+        })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      if (editReason && posterId && currentUserId) {
+        await supabase.from('messages').insert({
+            sender_id: currentUserId, receiver_id: posterId,
+            content: `【管理者通知】あなたの投稿「${title}」が編集されました。\n理由: ${editReason}`
+        });
+      }
+
+      if (!editReason) alert('イベントを更新しました！');
+      router.push('/admin');
+
+    } catch (error: unknown) {
+      console.error(error);
+      let message = '更新エラー';
+      if (error instanceof Error) {
+        message = error.message;
+      }
+      alert(message);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loading) return <div className="p-10 text-center text-gray-500">データを読み込んでいます...</div>;
+
+  const isImageLocked = !['admin', 'super_admin'].includes(myRole || '') && imageUpdateCount >= IMAGE_UPDATE_LIMIT;
+  const isTagLimitReached = tags.length >= MAX_TAGS;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-2xl mx-auto bg-white p-6 md:p-8 rounded-lg shadow-md border border-gray-100">
+        <h1 className="text-2xl font-bold mb-6 text-teal-800 text-center">投稿の編集</h1>
+        <form onSubmit={handleUpdate} className="space-y-6">
+          
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">活動名</label>
+            <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">カテゴリ</label>
+            <select required value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white">
+              <option value="">選択してください</option>
+              {CATEGORY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </div>
+
+          {/* ▼▼▼ タグ編集エリア ▼▼▼ */}
+          <div className="border border-gray-200 rounded-md p-4 bg-gray-50">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              タグ設定 <span className="text-xs font-normal text-gray-500">（最大{MAX_TAGS}つまで）</span>
+            </label>
+            
+            {/* 選択済みタグ */}
+            <div className="flex flex-wrap gap-2 mb-4 min-h-[30px]">
+              {tags.map((tag, idx) => (
+                <span key={idx} className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                  #{tag}
+                  <button type="button" onClick={() => removeTag(tag)} className="hover:text-blue-200 ml-1">×</button>
+                </span>
+              ))}
+              {tags.length === 0 && <span className="text-sm text-gray-400 py-1">タグが選択されていません</span>}
+            </div>
+
+            {/* カスタムタグ入力 */}
+            <div className="flex gap-2 mb-4">
+              <input 
+                type="text" 
+                value={customTagInput} 
+                onChange={(e) => setCustomTagInput(e.target.value)}
+                onKeyDown={handleCustomTagAdd}
+                placeholder="自由に入力して追加" 
+                className="flex-1 p-2 border border-gray-300 rounded text-sm"
+                disabled={isTagLimitReached}
+              />
+              <button 
+                type="button" 
+                onClick={handleCustomTagAdd}
+                className="bg-gray-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-gray-700 disabled:opacity-50"
+                disabled={isTagLimitReached || !customTagInput.trim()}
+              >
+                追加
+              </button>
+            </div>
+
+            {/* 推奨タグ */}
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs font-bold text-gray-500 block mb-1">よく使われるタグ:</span>
+                <div className="flex flex-wrap gap-2">
+                  {COMMON_TAGS.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => addTag(t)}
+                      disabled={isTagLimitReached || tags.includes(t)}
+                      className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {category && CATEGORY_TAGS[category] && (
+                <div>
+                  <span className="text-xs font-bold text-gray-500 block mb-1">「{category}」のおすすめ:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {CATEGORY_TAGS[category].map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => addTag(t)}
+                        disabled={isTagLimitReached || tags.includes(t)}
+                        className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* ▲▲▲ タグ編集エリア終了 ▲▲▲ */}
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">地域</label>
+            <select required value={area} onChange={(e) => setArea(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white">
+              <option value="">選択してください</option>
+              {AREA_OPTIONS.map((op) => <option key={op} value={op}>{op}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">開催日</label>
+            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">活動詳細</label>
+            <textarea rows={6} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
+          </div>
+
+          <div className="border-t pt-6">
+            <label className="block text-sm font-bold text-gray-700 mb-2">写真</label>
+            {currentImageUrl && !newImageFile && (
+              <div className="mb-4">
+                <div className="w-40 h-32 bg-gray-100 border rounded overflow-hidden">
+                  <img src={currentImageUrl} className="w-full h-full object-cover" />
+                </div>
+              </div>
+            )}
+            {newImageFile && (
+              <div className="mb-4">
+                <div className="w-40 h-32 bg-gray-100 border rounded overflow-hidden relative">
+                   <img src={URL.createObjectURL(newImageFile)} className="w-full h-full object-cover" />
+                </div>
+              </div>
+            )}
+            {isImageLocked ? (
+              <div className="bg-gray-100 p-4 rounded text-sm text-gray-500">🔒 変更回数上限です</div>
+            ) : (
+              <input type="file" accept="image/*" onChange={(e) => setNewImageFile(e.target.files?.[0] || null)} className="block w-full text-sm text-gray-500" />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+            <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="場所" className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="電話番号" className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+          </div>
+
+          <div className="flex flex-col gap-4 pt-4">
+            <button type="submit" disabled={updating} className="w-full bg-teal-700 text-white py-3 px-4 rounded-md font-bold disabled:opacity-50">{updating ? '更新中...' : '変更を保存する'}</button>
+            <Link href="/admin" className="text-center text-gray-500 underline text-sm">キャンセル</Link>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="app/admin/create/page.tsx">
 'use client';
 
@@ -3325,6 +4006,10 @@ import imageCompression from 'browser-image-compression';
 
 // 設定: 1日あたりの投稿上限数
 const EVENT_POST_LIMIT = 5;
+// 設定: タグの最大数
+const MAX_TAGS = 4;
+// 設定: 追加画像の最大数
+const MAX_ADDITIONAL_IMAGES = 2;
 
 // カテゴリの選択肢
 const CATEGORY_OPTIONS = [
@@ -3349,6 +4034,21 @@ const AREA_OPTIONS = [
   "浜名区（旧北区）",
   "天竜区（旧天竜区）"
 ];
+
+// 共通の推奨タグ
+const COMMON_TAGS = ["無料", "雨でもOK", "予約不要", "当日参加可"];
+
+// カテゴリごとの推奨タグ定義
+const CATEGORY_TAGS: Record<string, string[]> = {
+  "お祭り・マルシェ": ["食べ歩き", "地産地消", "縁日"],
+  "音楽・ライブ": ["生演奏", "野外フェス", "観覧無料"],
+  "スポーツ・運動": ["初心者歓迎", "体験会", "ヨガ"],
+  "学び・講座": ["ワークショップ", "自然観察", "歴史"],
+  "ボランティア": ["地域貢献", "ゴミ拾い", "初心者OK"],
+  "子育て・子供向け": ["ベビーカーOK", "授乳室あり", "読み聞かせ"],
+  "展示・芸術": ["写真展", "アート", "入場無料"],
+  "その他": ["交流会", "相談会"]
+};
 
 export default function CreateEventPage() {
   return (
@@ -3377,8 +4077,19 @@ function CreateEventForm() {
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
+
+  // 画像関連ステート
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  
+  // 追加画像関連ステート
+  const [additionalImages, setAdditionalImages] = useState<File[]>([]);
+  const [additionalPreviews, setAdditionalPreviews] = useState<string[]>([]);
+
+  // プレビュー用のスライド管理
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -3410,7 +4121,6 @@ function CreateEventForm() {
           .eq('poster_id', user.id)
           .gte('created_at', yesterday);
 
-        // error変数を明示的にチェックに使用して "unused" エラーを防ぐ
         if (!error && count !== null) {
           setRemainingPosts(Math.max(0, EVENT_POST_LIMIT - count));
         } else if (error) {
@@ -3442,6 +4152,8 @@ function CreateEventForm() {
         setLocation(data.location || '');
         setPhone(data.contact_phone || '');
         setDescription(data.description || '');
+        setTags(data.tags || []);
+        // 画像はコピーしない仕様
       }
     };
     fetchSourceEvent();
@@ -3456,6 +4168,50 @@ function CreateEventForm() {
     }
   };
 
+  const handleAdditionalImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const newFile = files[0];
+      if (additionalImages.length >= MAX_ADDITIONAL_IMAGES) {
+        alert(`追加写真は最大${MAX_ADDITIONAL_IMAGES}枚までです`);
+        return;
+      }
+      setAdditionalImages([...additionalImages, newFile]);
+      setAdditionalPreviews([...additionalPreviews, URL.createObjectURL(newFile)]);
+    }
+    e.target.value = '';
+  };
+
+  const removeAdditionalImage = (index: number) => {
+    const newImages = [...additionalImages];
+    const newPreviews = [...additionalPreviews];
+    newImages.splice(index, 1);
+    newPreviews.splice(index, 1);
+    setAdditionalImages(newImages);
+    setAdditionalPreviews(newPreviews);
+  };
+
+  const addTag = (tagToAdd: string) => {
+    const trimmedTag = tagToAdd.trim();
+    if (!trimmedTag) return;
+    if (tags.length >= MAX_TAGS) return;
+    if (tags.includes(trimmedTag)) return;
+    setTags([...tags, trimmedTag]);
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
+
+  const handleCustomTagAdd = (e: React.KeyboardEvent<HTMLInputElement> | React.MouseEvent) => {
+    if (e.type === 'keydown' && (e as React.KeyboardEvent).key !== 'Enter') return;
+    e.preventDefault();
+    if (customTagInput) {
+      addTag(customTagInput);
+      setCustomTagInput('');
+    }
+  };
+
   const handlePreview = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -3466,7 +4222,7 @@ function CreateEventForm() {
 
     if (!imageFile && !copyFromId) {
         if(!imageFile) {
-            alert('写真を選択してください');
+            alert('メイン写真を選択してください');
             return;
         }
     }
@@ -3489,7 +4245,31 @@ function CreateEventForm() {
     }
 
     setIsPreview(true);
+    setCurrentSlideIndex(0);
     window.scrollTo(0, 0);
+  };
+
+  // ★共通のアップロード関数（ここで圧縮を行うため、すべての画像に適用されます）
+  const uploadToStorage = async (file: File) => {
+    // 圧縮設定
+    const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.7 };
+    // 圧縮実行
+    const compressedFile = await imageCompression(file, options);
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from('event-images')
+      .upload(fileName, compressedFile);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('event-images')
+      .getPublicUrl(fileName);
+    
+    return data.publicUrl;
   };
 
   const handleSubmit = async () => {
@@ -3499,26 +4279,17 @@ function CreateEventForm() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('ログインしてください');
 
-      let imageUrl = null;
+      // 1. メイン画像のアップロード
+      let mainImageUrl = null;
       if (imageFile) {
-        const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.7 };
-        const compressedFile = await imageCompression(imageFile, options);
-        
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('event-images')
-          .upload(fileName, compressedFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data } = supabase.storage
-          .from('event-images')
-          .getPublicUrl(fileName);
-        
-        imageUrl = data.publicUrl;
+        mainImageUrl = await uploadToStorage(imageFile);
       }
+
+      // 2. 追加画像のアップロード（★並列処理で高速化）
+      // Promise.allを使って、すべての追加画像を同時に圧縮・アップロードします
+      const additionalImageUrls = await Promise.all(
+        additionalImages.map((file) => uploadToStorage(file))
+      );
 
       const { error: insertError } = await supabase
         .from('events')
@@ -3530,8 +4301,10 @@ function CreateEventForm() {
           location,
           contact_phone: phone,
           description,
-          image_url: imageUrl,
+          image_url: mainImageUrl,
           poster_id: user.id,
+          tags: tags,
+          additional_images: additionalImageUrls, // 追加画像URLリスト
         });
 
       if (insertError) throw insertError;
@@ -3539,7 +4312,7 @@ function CreateEventForm() {
       alert('イベントを公開しました！');
       router.push('/admin');
 
-    } catch (error: unknown) { // ★修正: unknown型にして型安全にする
+    } catch (error: unknown) {
       console.error(error);
       let message = '登録に失敗しました';
       if (error instanceof Error) {
@@ -3553,6 +4326,11 @@ function CreateEventForm() {
 
   const isLimitReached = !isAdmin && remainingPosts !== null && remainingPosts <= 0;
   const isSuperAdmin = userRole === 'super_admin';
+  const isTagLimitReached = tags.length >= MAX_TAGS;
+  const isAdditionalImageLimitReached = additionalImages.length >= MAX_ADDITIONAL_IMAGES;
+
+  // プレビュー用の画像リスト（メイン + 追加）
+  const allPreviewImages = [previewImageUrl, ...additionalPreviews].filter(Boolean) as string[];
 
   if (isPreview) {
     return (
@@ -3560,16 +4338,55 @@ function CreateEventForm() {
         <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden border border-teal-100">
           <div className="bg-teal-50 p-4 border-b border-teal-100 text-center">
             <h2 className="text-xl font-bold text-teal-800">プレビュー確認</h2>
-            <p className="text-sm text-teal-600">実際の表示イメージです。この内容で公開しますか？</p>
+            <p className="text-sm text-teal-600">実際の表示イメージです（写真はスクロールで切り替わります）</p>
           </div>
 
           <div className="p-6 space-y-6">
-            <div className="w-full aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center relative">
-              {previewImageUrl ? (
-                <img src={previewImageUrl} alt="Preview" className="w-full h-full object-cover" />
+            {/* 簡易カルーセル（プレビュー用） */}
+            <div className="w-full aspect-video bg-gray-100 rounded-lg overflow-hidden relative group">
+              {allPreviewImages.length > 0 ? (
+                <>
+                  <img 
+                    src={allPreviewImages[currentSlideIndex]} 
+                    alt="Preview" 
+                    className="w-full h-full object-cover transition-opacity duration-500" 
+                  />
+                  
+                  {allPreviewImages.length > 1 && (
+                    <>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentSlideIndex((prev) => (prev === 0 ? allPreviewImages.length - 1 : prev - 1));
+                        }}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 text-white p-2 rounded-full hover:bg-black/50"
+                      >
+                        ◀
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentSlideIndex((prev) => (prev === allPreviewImages.length - 1 ? 0 : prev + 1));
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 text-white p-2 rounded-full hover:bg-black/50"
+                      >
+                        ▶
+                      </button>
+                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                        {allPreviewImages.map((_, idx) => (
+                          <div 
+                            key={idx} 
+                            className={`w-2 h-2 rounded-full ${idx === currentSlideIndex ? 'bg-white' : 'bg-white/50'}`} 
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
               ) : (
-                <div className="text-gray-400">No Image</div>
+                <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
               )}
+
               <span className="absolute top-2 left-2 bg-white/90 text-teal-800 text-xs font-bold px-2 py-1 rounded shadow">
                 {category}
               </span>
@@ -3580,6 +4397,17 @@ function CreateEventForm() {
 
             <div>
               <p className="text-gray-500 text-sm mb-1">{date.replaceAll('-', '/')}</p>
+              
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-1">
+                  {tags.map((tag, index) => (
+                    <span key={index} className="text-sm text-gray-500 font-bold">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <h1 className="text-2xl font-bold text-gray-900 mb-4">{title}</h1>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
@@ -3657,6 +4485,81 @@ function CreateEventForm() {
             </select>
           </div>
 
+          {/* タグ設定エリア */}
+          <div className="border border-gray-200 rounded-md p-4 bg-gray-50">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              タグ設定 <span className="text-xs font-normal text-gray-500">（最大{MAX_TAGS}つまで・検索に使われます）</span>
+            </label>
+            
+            <div className="flex flex-wrap gap-2 mb-4 min-h-[30px]">
+              {tags.map((tag, idx) => (
+                <span key={idx} className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
+                  #{tag}
+                  <button type="button" onClick={() => removeTag(tag)} className="hover:text-blue-200 ml-1">×</button>
+                </span>
+              ))}
+              {tags.length === 0 && <span className="text-sm text-gray-400 py-1">タグが選択されていません</span>}
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              <input 
+                type="text" 
+                value={customTagInput} 
+                onChange={(e) => setCustomTagInput(e.target.value)}
+                onKeyDown={handleCustomTagAdd}
+                placeholder="自由に入力して追加" 
+                className="flex-1 p-2 border border-gray-300 rounded text-sm"
+                disabled={isLimitReached || isTagLimitReached}
+              />
+              <button 
+                type="button" 
+                onClick={handleCustomTagAdd}
+                className="bg-gray-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-gray-700 disabled:opacity-50"
+                disabled={isLimitReached || isTagLimitReached || !customTagInput.trim()}
+              >
+                追加
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs font-bold text-gray-500 block mb-1">よく使われるタグ:</span>
+                <div className="flex flex-wrap gap-2">
+                  {COMMON_TAGS.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => addTag(t)}
+                      disabled={isTagLimitReached || tags.includes(t)}
+                      className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {category && CATEGORY_TAGS[category] && (
+                <div>
+                  <span className="text-xs font-bold text-gray-500 block mb-1">「{category}」のおすすめ:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {CATEGORY_TAGS[category].map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => addTag(t)}
+                        disabled={isTagLimitReached || tags.includes(t)}
+                        className={`text-xs px-2 py-1 rounded border ${tags.includes(t) ? 'bg-gray-200 text-gray-400 border-gray-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:border-blue-300'}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">
               地域 <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
@@ -3679,18 +4582,66 @@ function CreateEventForm() {
             <textarea rows={6} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md" disabled={isLimitReached} />
           </div>
 
+          {/* ▼▼▼ 写真エリア（メイン + 追加2枚） ▼▼▼ */}
           <div className="border-t pt-6 border-dashed border-gray-300">
-            <label className="block text-sm font-bold text-gray-700 mb-2 text-center">
-              写真 <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              メイン写真 <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded ml-2">必須</span>
             </label>
-            <div className="flex justify-center">
-              <label className={`cursor-pointer text-white font-bold py-3 px-8 rounded-full shadow-md flex items-center gap-2 ${isLimitReached ? 'bg-gray-400' : 'bg-orange-400 hover:bg-orange-500'}`}>
-                <span>📷 写真を選択する</span>
-                <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" disabled={isLimitReached} />
-              </label>
+            
+            {imageFile ? (
+              <div className="mb-4 relative w-48 aspect-video bg-gray-100 rounded-lg overflow-hidden border">
+                <img src={URL.createObjectURL(imageFile)} alt="Main" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => { setImageFile(null); setPreviewImageUrl(null); }}
+                  className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-start mb-4">
+                <label className={`cursor-pointer text-white font-bold py-3 px-8 rounded-full shadow-md flex items-center gap-2 transition ${isLimitReached ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-400 hover:bg-orange-500'}`}>
+                  <span>📷 メイン写真を選択</span>
+                  <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" disabled={isLimitReached} />
+                </label>
+              </div>
+            )}
+
+            <label className="block text-sm font-bold text-gray-700 mb-2 mt-6">
+              追加写真 <span className="text-gray-400 text-xs font-normal">（任意・最大2枚）</span>
+            </label>
+            
+            <div className="flex flex-wrap gap-4">
+              {additionalImages.map((img, idx) => (
+                <div key={idx} className="relative w-32 aspect-video bg-gray-100 rounded-lg overflow-hidden border">
+                  <img src={URL.createObjectURL(img)} alt={`Sub ${idx}`} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeAdditionalImage(idx)}
+                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 transition"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              {!isAdditionalImageLimitReached && (
+                <label className={`cursor-pointer w-32 aspect-video bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 hover:border-blue-400 transition ${isLimitReached ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <span className="text-2xl">+</span>
+                  <span className="text-xs font-bold">追加する</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleAdditionalImageSelect} 
+                    className="hidden" 
+                    disabled={isLimitReached} 
+                  />
+                </label>
+              )}
             </div>
-            {imageFile && <p className="text-center text-sm text-gray-600 mt-2">選択中: {imageFile.name}</p>}
           </div>
+          {/* ▲▲▲ 写真エリア終了 ▲▲▲ */}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
             <div>
@@ -3720,314 +4671,6 @@ function CreateEventForm() {
 }
 </file>
 
-<file path="app/admin/edit/[id]/page.tsx">
-'use client';
-
-export const runtime = 'edge';
-
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
-import imageCompression from 'browser-image-compression';
-
-const AREA_OPTIONS = [
-  "中央区（旧中区）",
-  "中央区（旧東区）",
-  "中央区（旧西区）",
-  "中央区（旧南区）",
-  "中央区（旧北区・三方原）",
-  "浜名区（旧浜北区）",
-  "浜名区（旧北区）",
-  "天竜区（旧天竜区）"
-];
-
-const CATEGORY_OPTIONS = [
-  "お祭り・マルシェ",
-  "音楽・ライブ",
-  "スポーツ・運動",
-  "学び・講座",
-  "ボランティア",
-  "子育て・子供向け",
-  "展示・芸術",
-  "その他"
-];
-
-const IMAGE_UPDATE_LIMIT = 2;
-
-export default function EditEventPage() {
-  const router = useRouter();
-  const params = useParams();
-  const id = params.id; 
-
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('');
-  const [area, setArea] = useState('');
-  const [date, setDate] = useState('');
-  const [location, setLocation] = useState('');
-  const [phone, setPhone] = useState('');
-  const [description, setDescription] = useState('');
-  
-  const [posterId, setPosterId] = useState<string | null>(null);
-  const [myRole, setMyRole] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [imageUpdateCount, setImageUpdateCount] = useState<number>(0);
-  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
-  const [newImageFile, setNewImageFile] = useState<File | null>(null);
-
-  useEffect(() => {
-    const fetchEventAndProfile = async () => {
-      if (!id) return;
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setCurrentUserId(user.id);
-          const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-          if (profile) setMyRole(profile.role);
-        }
-        const { data, error } = await supabase.from('events').select('*').eq('id', id).single();
-        if (error) throw error;
-        if (data) {
-          setTitle(data.title || '');
-          setCategory(data.category || '');
-          setArea(data.area || '');
-          setDate(data.event_date || '');
-          setLocation(data.location || '');
-          setPhone(data.contact_phone || '');
-          setDescription(data.description || '');
-          setCurrentImageUrl(data.image_url);
-          setPosterId(data.poster_id);
-          setImageUpdateCount(data.image_update_count || 0);
-        }
-      } catch (error) {
-        console.error('データ取得エラー:', error);
-        router.push('/admin');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEventAndProfile();
-  }, [id, router]);
-
-  const getFilePathFromUrl = (url: string) => {
-    try {
-      const parts = url.split('/event-images/');
-      if (parts.length > 1) {
-        return decodeURIComponent(parts[1]);
-      }
-      return null;
-    } catch (e) {
-      console.error('パス解析エラー', e);
-      return null;
-    }
-  };
-
-  const uploadImage = async (file: File) => {
-    try {
-      console.log(`圧縮前: ${(file.size / 1024).toFixed(2)} KB`);
-      const options = { maxSizeMB: 0.8, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.7 };
-      const compressedFile = await imageCompression(file, options);
-      console.log(`圧縮後: ${(compressedFile.size / 1024).toFixed(2)} KB`);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${fileName}`;
-      const { error: uploadError } = await supabase.storage.from('event-images').upload(filePath, compressedFile);
-      if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from('event-images').getPublicUrl(filePath);
-      return data.publicUrl;
-    } catch (error) {
-      console.error('画像アップロードエラー:', error);
-      throw new Error('画像の圧縮またはアップロードに失敗しました');
-    }
-  };
-
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title || !date || !area || !category) { alert('活動名、カテゴリ、地域、開催日は必須です'); return; }
-    
-    const hasAdminPrivileges = ['admin', 'super_admin'].includes(myRole || '');
-    if (newImageFile && !hasAdminPrivileges && imageUpdateCount >= IMAGE_UPDATE_LIMIT) {
-      alert(`このイベントの写真は既に${IMAGE_UPDATE_LIMIT}回変更されているため、これ以上変更できません。`);
-      return;
-    }
-    if (!confirm('この内容で更新しますか？')) return;
-
-    let editReason = '';
-    const isEditingOthersPost = posterId && posterId !== currentUserId;
-    if (hasAdminPrivileges && isEditingOthersPost) {
-      const input = window.prompt('【管理者操作】編集理由を入力（空欄OK）');
-      if (input === null) return;
-      editReason = input;
-    }
-
-    setUpdating(true);
-
-    try {
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
-      // authError変数を使用しないとエラーになるため、条件式に含める
-      if (authError || !session) throw new Error('ログインセッションが切れました。');
-
-      let imageUrl = currentImageUrl;
-      let nextImageUpdateCount = imageUpdateCount;
-
-      if (newImageFile) {
-        imageUrl = await uploadImage(newImageFile);
-        nextImageUpdateCount = imageUpdateCount + 1;
-
-        if (currentImageUrl) {
-          const oldFilePath = getFilePathFromUrl(currentImageUrl);
-          if (oldFilePath) {
-            const { error: deleteError } = await supabase.storage
-              .from('event-images')
-              .remove([oldFilePath]);
-            
-            // deleteError変数を使用
-            if (deleteError) console.error('旧画像削除失敗:', deleteError);
-          }
-        }
-      }
-
-      const { error: updateError } = await supabase
-        .from('events')
-        .update({
-          title, 
-          category,
-          area, 
-          event_date: date, 
-          location, 
-          contact_phone: phone,
-          description, 
-          image_url: imageUrl, 
-          image_update_count: nextImageUpdateCount,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-
-      if (updateError) throw updateError;
-
-      if (editReason && posterId && currentUserId) {
-        await supabase.from('messages').insert({
-            sender_id: currentUserId, receiver_id: posterId,
-            content: `【管理者通知】あなたの投稿「${title}」が編集されました。\n理由: ${editReason}`
-        });
-      }
-
-      if (!editReason) alert('イベントを更新しました！');
-      router.push('/admin');
-
-    } catch (error: unknown) { // ★修正: any型を避ける
-      console.error(error);
-      let message = '更新エラー';
-      if (error instanceof Error) {
-        message = error.message;
-      }
-      alert(message);
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  if (loading) return <div className="p-10 text-center text-gray-500">データを読み込んでいます...</div>;
-
-  const isImageLocked = !['admin', 'super_admin'].includes(myRole || '') && imageUpdateCount >= IMAGE_UPDATE_LIMIT;
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-2xl mx-auto bg-white p-6 md:p-8 rounded-lg shadow-md border border-gray-100">
-        <h1 className="text-2xl font-bold mb-6 text-teal-800 text-center">投稿の編集</h1>
-        <form onSubmit={handleUpdate} className="space-y-6">
-          
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">活動名</label>
-            <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">カテゴリ</label>
-            <select required value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white">
-              <option value="">選択してください</option>
-              {CATEGORY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">地域</label>
-            <select required value={area} onChange={(e) => setArea(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm bg-white">
-              <option value="">選択してください</option>
-              {AREA_OPTIONS.map((op) => <option key={op} value={op}>{op}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">開催日</label>
-            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">活動詳細</label>
-            <textarea rows={6} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm" />
-          </div>
-
-          <div className="border-t pt-6">
-            <label className="block text-sm font-bold text-gray-700 mb-2">写真</label>
-            {currentImageUrl && !newImageFile && (
-              <div className="mb-4">
-                <div className="w-40 h-32 bg-gray-100 border rounded overflow-hidden">
-                  <img src={currentImageUrl} className="w-full h-full object-cover" />
-                </div>
-              </div>
-            )}
-            {newImageFile && (
-              <div className="mb-4">
-                <div className="w-40 h-32 bg-gray-100 border rounded overflow-hidden relative">
-                   <img src={URL.createObjectURL(newImageFile)} className="w-full h-full object-cover" />
-                </div>
-              </div>
-            )}
-            {isImageLocked ? (
-              <div className="bg-gray-100 p-4 rounded text-sm text-gray-500">🔒 変更回数上限です</div>
-            ) : (
-              <input type="file" accept="image/*" onChange={(e) => setNewImageFile(e.target.files?.[0] || null)} className="block w-full text-sm text-gray-500" />
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-            <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="場所" className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
-            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="電話番号" className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
-          </div>
-
-          <div className="flex flex-col gap-4 pt-4">
-            <button type="submit" disabled={updating} className="w-full bg-teal-700 text-white py-3 px-4 rounded-md font-bold disabled:opacity-50">{updating ? '更新中...' : '変更を保存する'}</button>
-            <Link href="/admin" className="text-center text-gray-500 underline text-sm">キャンセル</Link>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path=".github/workflows/cleanup.yml">
-name: Cleanup Old Images
-
-on:
-  schedule:
-    # 日本時間 16:10 (UTC 07:10) に実行
-    - cron: '0 10 * * *'
-  workflow_dispatch:
-
-jobs:
-  cleanup:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Call Cleanup API
-        run: |
-          curl --fail -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "${{ secrets.APP_URL }}/api/cleanup-images?key=${{ secrets.CRON_SECRET_KEY }}"
-</file>
-
 <file path="app/events/[id]/page.tsx">
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
@@ -4035,7 +4678,8 @@ import { notFound } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
 import AccessibilityMenu from '@/app/components/AccessibilityMenu';
 import ViewCounter from '@/app/components/ViewCounter';
-import ReportButton from '@/app/components/ReportButton'; 
+import ReportButton from '@/app/components/ReportButton';
+import ImageCarousel from '@/app/components/ImageCarousel'; // ★追加
 
 export const runtime = 'edge';
 export const revalidate = 0;
@@ -4049,9 +4693,12 @@ type Event = {
   category: string | null;
   contact_phone: string | null;
   image_url: string | null;
+  additional_images: string[] | null; // ★追加
+  tags: string[] | null;
   profiles: {
     name: string | null;
     avatar_url: string | null;
+    website_url: string | null;
   } | null;
 };
 
@@ -4060,7 +4707,7 @@ async function getEvent(id: string) {
     .from('events')
     .select(`
       *,
-      profiles ( name, avatar_url )
+      profiles ( name, avatar_url, website_url )
     `)
     .eq('id', id)
     .single();
@@ -4084,6 +4731,13 @@ export default async function EventDetailPage({
 
   const posterName = event.profiles?.name || '主催者不明';
   const posterIcon = event.profiles?.avatar_url;
+  const posterUrl = event.profiles?.website_url;
+
+  // 画像リストの作成（メイン画像 + 追加画像）
+  const allImages = [
+    event.image_url,
+    ...(event.additional_images || [])
+  ].filter((img): img is string => !!img);
 
   // 読み上げテキスト作成
   const spokenDate = new Date(event.event_date).toLocaleDateString('ja-JP', {
@@ -4112,116 +4766,135 @@ export default async function EventDetailPage({
       <AccessibilityMenu textToRead={readingText} />
 
       <div className="p-4 bg-gray-100 border-b sticky top-0 z-10">
-        <Link href="/" className="inline-flex items-center text-xl font-bold text-blue-700 py-2 px-4 border-2 border-blue-700 rounded-lg bg-white hover:bg-blue-50">
+        <Link href="/" className="inline-flex items-center text-sm font-bold text-slate-600 py-2 px-4 border border-slate-300 rounded-full bg-white hover:bg-slate-50 transition-colors">
           ← もどる
         </Link>
       </div>
 
       <div className="max-w-2xl mx-auto">
-        {/* 画像エリア */}
-        <div className="w-full h-64 md:h-96 bg-gray-200">
-          {event.image_url ? (
-            <img 
-              src={event.image_url} 
-              alt={event.title} 
-              className="w-full h-full object-cover" 
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-400 text-2xl">
-              画像なし
-            </div>
-          )}
-        </div>
+        
+        {/* ★修正: 画像カルーセルコンポーネントを使用 */}
+        <ImageCarousel images={allImages} alt={event.title} />
 
         <div className="p-6 space-y-8">
-              <div className="flex items-center gap-3 border-b pb-4">
-                  <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
+              {/* 主催者情報 & HPリンク */}
+              <div className="flex items-center gap-4 border-b pb-6">
+                  <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex-shrink-0">
                     {posterIcon ? (
                       <img src={posterIcon} alt={posterName} className="w-full h-full object-cover" />
                     ) : (
-                      <svg className="w-full h-full text-gray-500 p-2" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-full h-full text-gray-500 p-3" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                       </svg>
                     )}
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">投稿・主催</p>
-                    <p className="text-lg font-bold text-gray-800">{posterName}</p>
+                    <p className="text-xs text-gray-500 font-bold mb-0.5">投稿・主催</p>
+                    <p className="text-lg font-bold text-gray-900 leading-tight">{posterName}</p>
+                    
+                    {posterUrl && (
+                      <a 
+                        href={posterUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline mt-1"
+                      >
+                        この団体のホームページはこちら
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                      </a>
+                    )}
                   </div>
               </div>
 
               <div>
                 {/* カテゴリ表示 */}
-                {event.category && (
-                  <span className="inline-block bg-teal-100 text-teal-800 text-base font-bold px-4 py-1.5 rounded-full mb-2 border border-teal-200">
-                    {event.category}
-                  </span>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  {event.category && (
+                    <span className="inline-block bg-teal-600 text-white text-sm font-bold px-3 py-1 rounded-full shadow-sm">
+                      {event.category}
+                    </span>
+                  )}
+                </div>
+
+                {/* タグ表示 */}
+                {event.tags && event.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {event.tags.map((tag, index) => (
+                      <span key={index} className="text-sm font-bold text-gray-500">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
                 )}
-                <h1 className="text-3xl font-bold text-gray-900 leading-tight">
+
+                <h1 className="text-3xl font-extrabold text-gray-900 leading-tight tracking-tight">
                   {event.title}
                 </h1>
               </div>
 
               <div className="space-y-6 text-xl">
                 <div>
-                  <span className="text-gray-500 text-sm block">いつ</span>
-                  <span className="font-bold text-2xl">{formatDate(event.event_date)}</span>
+                  <span className="text-gray-500 text-xs font-bold block mb-1">開催日</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">📅</span>
+                    <span className="font-bold text-2xl text-gray-800">{formatDate(event.event_date)}</span>
+                  </div>
                 </div>
                 
-                <div className="border-t border-b py-6 my-6">
-                  <span className="text-gray-500 text-sm block mb-3">どこで</span>
-                  <div className="flex flex-col md:flex-row gap-6">
-                    <div className="flex-1">
-                        <p className="font-bold text-2xl mb-2">{event.location}</p>
-                        <a 
-                          /* ▼▼ 修正箇所1: HTTPS化とURL修正 ▼▼ */
-                          href={`https://maps.google.com/maps?q=${encodeURIComponent(event.location || '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline flex items-center gap-1 inline-block"
-                        >
-                          Googleマップアプリで見る
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </a>
+                <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                  <span className="text-gray-500 text-xs font-bold block mb-3">開催場所</span>
+                  <div className="flex flex-col gap-4">
+                    <div>
+                        <div className="flex items-start gap-2 mb-2">
+                          <span className="text-2xl mt-0.5">📍</span>
+                          <p className="font-bold text-2xl text-gray-800 leading-tight">{event.location || '未定'}</p>
+                        </div>
+                        
+                        {event.location && (
+                          <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 ml-9"
+                          >
+                            Googleマップアプリで見る
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                          </a>
+                        )}
                     </div>
 
-                    <div className="w-full md:w-1/2 h-64 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                      {event.location ? (
+                    {event.location && (
+                      <div className="w-full h-64 bg-gray-200 rounded-xl overflow-hidden border border-gray-300 shadow-sm relative">
                         <iframe
                           width="100%"
                           height="100%"
                           style={{ border: 0 }}
                           loading="lazy"
                           allowFullScreen
-                          /* ▼▼ 修正箇所2: HTTPS化とURL修正 ▼▼ */
                           src={`https://maps.google.com/maps?q=${encodeURIComponent(event.location)}&output=embed`}
                           title="Google Map"
                         ></iframe>
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-gray-400 text-base">
-                          場所情報がありません
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {event.contact_phone && (
-                  <div>
-                    <span className="text-gray-500 text-sm block">連絡先</span>
-                    <span className="font-bold text-2xl">{event.contact_phone}</span>
+                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <span className="text-blue-800 text-xs font-bold block mb-1">お問い合わせ電話番号</span>
+                    <span className="font-bold text-2xl text-slate-800">{event.contact_phone}</span>
                   </div>
                 )}
 
-                <div className="bg-orange-50 p-6 rounded-xl mt-4">
-                  <span className="text-gray-500 text-sm block mb-2">くわしい内容</span>
-                  <p className="whitespace-pre-wrap leading-relaxed text-lg">
+                <div className="mt-8 pt-8 border-t border-gray-200">
+                  <span className="text-gray-500 text-xs font-bold block mb-4">イベント詳細</span>
+                  <p className="whitespace-pre-wrap leading-loose text-base text-gray-700 font-medium">
                     {event.description}
                   </p>
                 </div>
 
                 {/* 通報ボタン */}
-                <div className="mt-8 flex justify-end">
+                <div className="mt-12 flex justify-center">
                   <ReportButton eventId={event.id} />
                 </div>
 
@@ -4622,12 +5295,36 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import EventList from '@/app/components/EventList';
 import Maintenance from '@/app/components/Maintenance';
+import FilterBar from '@/app/components/FilterBar'; // 追加
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
 const PER_PAGE = 10;
+
+// ▼▼ 定数定義（検索用） ▼▼
+const CATEGORY_OPTIONS = [
+  "お祭り・マルシェ",
+  "音楽・ライブ",
+  "スポーツ・運動",
+  "学び・講座",
+  "ボランティア",
+  "子育て・子供向け",
+  "展示・芸術",
+  "その他"
+];
+
+const AREA_OPTIONS = [
+  "中央区（旧中区）",
+  "中央区（旧東区）",
+  "中央区（旧西区）",
+  "中央区（旧南区）",
+  "中央区（旧北区・三方原）",
+  "浜名区（旧浜北区）",
+  "浜名区（旧北区）",
+  "天竜区（旧天竜区）"
+];
 
 type Event = {
   id: number;
@@ -4637,6 +5334,7 @@ type Event = {
   area: string | null;
   category: string | null;
   image_url: string | null;
+  tags: string[] | null;
   profiles: {
     name: string | null;
     avatar_url: string | null;
@@ -4648,7 +5346,16 @@ type EventsResult = {
   total: number | null;
 };
 
-// ★修正: any ではなく SupabaseClient 型を指定
+// 検索パラメータの型定義
+type SearchParams = {
+  page?: string;
+  category?: string;
+  area?: string;
+  q?: string;
+  rain?: string; // 追加: 雨でもOKフィルタ
+  sort?: string; // 追加: 並び替え
+};
+
 async function checkMaintenance(supabase: SupabaseClient) {
   const { data } = await supabase
     .from('system_settings')
@@ -4659,7 +5366,8 @@ async function checkMaintenance(supabase: SupabaseClient) {
   return data?.value === 'true';
 }
 
-async function getEvents(page: number): Promise<EventsResult> {
+// ▼▼ 検索ロジックを組み込んだデータ取得関数 ▼▼
+async function getEvents(params: SearchParams): Promise<EventsResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -4669,23 +5377,61 @@ async function getEvents(page: number): Promise<EventsResult> {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  const today = new Date().toISOString().split('T')[0];
-  const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
+  const page = params.page ? parseInt(params.page) : 1;
   const from = (page - 1) * PER_PAGE;
   const to = from + PER_PAGE - 1;
 
-  const { data, error, count } = await supabase
+  const today = new Date().toISOString().split('T')[0];
+  const twoWeeksLater = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  let query = supabase
     .from('events')
     .select(`
-      id, title, event_date, location, area, category, image_url,
+      id, title, event_date, location, area, category, image_url, tags, created_at,
       profiles ( name, avatar_url ) 
     `, { count: 'exact' })
     .eq('is_hidden', false) 
-    .gte('event_date', today)
-    .lte('event_date', twoWeeksLater)
-    .order('event_date', { ascending: true })
-    .range(from, to);
+    .gte('event_date', today);
+
+  // 1. カテゴリ検索
+  if (params.category) {
+    query = query.eq('category', params.category);
+  }
+
+  // 2. エリア検索
+  if (params.area) {
+    query = query.eq('area', params.area);
+  }
+
+  // 3. キーワード検索（タイトル OR タグ）
+  if (params.q) {
+    query = query.or(`title.ilike.%${params.q}%,tags.cs.{${params.q}}`);
+  }
+
+  // 4. 雨でもOK検索（タグに「雨でもOK」が含まれるか）
+  if (params.rain === 'true') {
+    // tags配列が '雨でもOK' を含んでいるか
+    query = query.contains('tags', ['雨でもOK']);
+  }
+
+  // 検索条件がない場合のみ、デフォルトで「2週間先まで」に絞る
+  // (ただし、新着順で見たい場合などは期間制限を外す考え方もあるが、ここでは基本ルールに従う)
+  if (!params.q && !params.category && !params.area && !params.rain && !params.sort) {
+     query = query.lte('event_date', twoWeeksLater);
+  }
+
+  // 5. 並び替え
+  if (params.sort === 'newest') {
+    // 新着順（作成日 降順）
+    query = query.order('created_at', { ascending: false });
+  } else {
+    // 開催が早い順（開催日 昇順） -> デフォルト
+    query = query.order('event_date', { ascending: true });
+  }
+
+  query = query.range(from, to);
+
+  const { data, error, count } = await query;
 
   if (error) {
     console.error('Supabase Error:', error);
@@ -4700,7 +5446,6 @@ export default async function Home({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  // Supabaseクライアント作成とメンテナンスチェック
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -4711,64 +5456,186 @@ export default async function Home({
   }
 
   const resolvedSearchParams = await searchParams;
-  const page = typeof resolvedSearchParams.page === 'string' ? parseInt(resolvedSearchParams.page) : 1;
   
-  const { events, total } = await getEvents(page);
+  // パラメータの整理
+  const params: SearchParams = {
+    page: typeof resolvedSearchParams.page === 'string' ? resolvedSearchParams.page : '1',
+    category: typeof resolvedSearchParams.category === 'string' ? resolvedSearchParams.category : undefined,
+    area: typeof resolvedSearchParams.area === 'string' ? resolvedSearchParams.area : undefined,
+    q: typeof resolvedSearchParams.q === 'string' ? resolvedSearchParams.q : undefined,
+    rain: typeof resolvedSearchParams.rain === 'string' ? resolvedSearchParams.rain : undefined,
+    sort: typeof resolvedSearchParams.sort === 'string' ? resolvedSearchParams.sort : undefined,
+  };
+  
+  const { events, total } = await getEvents(params);
   
   const totalEvents = total || 0;
+  const currentPage = parseInt(params.page || '1');
   const totalPages = Math.ceil(totalEvents / PER_PAGE);
+  const isSearching = !!(params.category || params.area || params.q || params.rain);
 
   return (
-    <main className="min-h-screen bg-slate-50 font-sans flex flex-col">
+    <main className="min-h-screen bg-slate-100 font-sans flex flex-col text-slate-900">
       
       {/* ▼▼ ヘッダー ▼▼ */}
-      <header className="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-20 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-white rounded-full p-1 flex-shrink-0">
-             <img src="/logo.png" alt="浜松市ロゴ" className="w-full h-full object-contain" />
-          </div>
+      <header className="bg-white border-b border-slate-300 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-5xl mx-auto px-6 h-20 flex justify-between items-center">
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="w-10 h-10 relative transition-transform group-hover:scale-105">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              Hamamatsu<span className="text-blue-700">Events</span>
+            </h1>
+          </Link>
           
-          <div>
-            <h1 className="text-2xl font-bold tracking-wide leading-none">浜松イベント情報</h1>
-            <p className="text-xs mt-1 text-sky-100">地域の催し物がすぐわかる</p>
-          </div>
-        </div>
-        
-        
-        {/* ログインボタン */}
-        <div>
           <Link 
-            href="/login" 
-            className="text-xs sm:text-sm font-medium bg-blue-800 hover:bg-blue-600 text-white px-3 py-2 rounded transition-colors border border-blue-600"
+            href="/admin" 
+            className="text-base font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1 transition-colors px-4 py-2 rounded hover:bg-blue-50"
           >
-            関係者ログイン
+            イベント投稿
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
           </Link>
         </div>
       </header>
-      
 
-      <div className="max-w-md mx-auto md:max-w-4xl p-4 flex-grow w-full">
-        {/* クライアントコンポーネントにデータを渡す */}
-        <EventList events={events} page={page} totalPages={totalPages} />
+      {/* ▼▼ ヒーローセクション ▼▼ */}
+      <div className="bg-blue-50 pb-16 pt-12 px-6 rounded-b-[3rem] shadow-sm mb-10 border-b border-blue-200">
+        <div className="max-w-2xl mx-auto text-center">
+          
+          <h2 className="text-3xl md:text-5xl font-extrabold text-slate-900 mb-4 leading-tight animate-fade-in-up">
+            今週末、<br/>
+            <span className="text-blue-700">どこへ出かける？</span>
+          </h2>
+          <p className="text-base md:text-lg font-bold text-slate-700 mb-10 animate-fade-in-up animation-delay-200">
+            浜松エリアのイベントを厳選してお届け
+          </p>
+
+          {/* 検索バー */}
+          <form action="/" method="GET" className="relative mb-8 shadow-xl rounded-full group animate-fade-in-up animation-delay-400">
+             {/* 既存フィルタ維持 */}
+            {params.category && <input type="hidden" name="category" value={params.category} />}
+            {params.area && <input type="hidden" name="area" value={params.area} />}
+            {params.rain && <input type="hidden" name="rain" value={params.rain} />}
+
+            <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            </div>
+            <input 
+              type="text" 
+              name="q"
+              defaultValue={params.q}
+              placeholder="キーワード検索（例：祭り、無料）" 
+              className="w-full py-5 pl-14 pr-6 rounded-full border-2 border-blue-100 focus:border-blue-600 focus:ring-0 text-lg font-bold placeholder-slate-400 text-slate-900 shadow-sm outline-none transition-colors"
+            />
+          </form>
+
+          {/* カテゴリタグ */}
+          <div className="flex flex-wrap justify-center gap-3 animate-fade-in-up animation-delay-400">
+             <Link 
+              href="/" 
+              className={`px-5 py-2 rounded-full text-sm font-bold shadow-md transition transform hover:-translate-y-0.5 ${
+                !params.category 
+                  ? 'bg-blue-700 text-white' 
+                  : 'bg-white text-blue-800 border-2 border-blue-100 hover:bg-blue-50'
+              }`}
+            >
+              すべて
+            </Link>
+            {CATEGORY_OPTIONS.map((cat) => (
+              <Link
+                key={cat}
+                href={`/?${new URLSearchParams({
+                  ...(params.q ? { q: params.q } : {}),
+                  ...(params.area ? { area: params.area } : {}),
+                  ...(params.rain ? { rain: params.rain } : {}),
+                  ...(params.category === cat ? {} : { category: cat }),
+                }).toString()}`}
+                className={`px-5 py-2 rounded-full text-sm font-bold shadow-sm border-2 transition transform hover:-translate-y-0.5 ${
+                  params.category === cat
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                    : 'bg-white text-blue-800 border-blue-100 hover:bg-blue-50 hover:border-blue-300'
+                }`}
+              >
+                {cat}
+              </Link>
+            ))}
+          </div>
+
+          {/* エリアタグ */}
+          <div className="mt-6 animate-fade-in-up animation-delay-400">
+            <p className="text-xs font-bold text-slate-500 mb-2">エリアで絞り込む</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {AREA_OPTIONS.map((areaName) => {
+                const match = areaName.match(/（(.+)）/);
+                const shortName = match ? match[1] : areaName;
+                return (
+                  <Link
+                    key={areaName}
+                    href={`/?${new URLSearchParams({
+                      ...(params.q ? { q: params.q } : {}),
+                      ...(params.category ? { category: params.category } : {}),
+                      ...(params.rain ? { rain: params.rain } : {}),
+                      ...(params.area === areaName ? {} : { area: areaName }),
+                    }).toString()}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors ${
+                      params.area === areaName
+                        ? 'bg-blue-100 text-blue-800 border-blue-300'
+                        : 'bg-white text-slate-500 border-blue-50 hover:border-blue-200 hover:text-blue-600'
+                    }`}
+                  >
+                    {shortName}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ▼▼ メインコンテンツ ▼▼ */}
+      <div className="max-w-5xl mx-auto px-6 flex-grow w-full">
+        
+        {/* ★追加: フィルターバー（雨でもOK・並び替え） */}
+        <FilterBar />
+
+        {/* 検索結果・件数・クリアボタン */}
+        <div className="flex items-center justify-between mb-6 px-1">
+          <div className="flex items-center gap-3">
+            <h3 className="text-2xl font-extrabold text-slate-900">
+              {isSearching ? '検索結果' : 'おすすめイベント'}
+            </h3>
+            <span className="bg-blue-100 text-blue-800 text-sm font-black px-3 py-1 rounded-full border border-blue-200">{totalEvents}件</span>
+          </div>
+          
+          {/* ★修正: 条件クリアボタン（わかりやすいボタンデザインに変更） */}
+          {isSearching && (
+             <Link 
+               href="/" 
+               className="flex items-center gap-2 bg-slate-200 hover:bg-red-100 text-slate-600 hover:text-red-600 px-4 py-2 rounded-full text-xs font-bold transition-colors"
+             >
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+               条件をクリア
+             </Link>
+          )}
+        </div>
+
+        <EventList events={events} page={currentPage} totalPages={totalPages} />
       </div>
 
       {/* フッター */}
-      <footer className="bg-gray-800 text-gray-300 py-8 mt-12 text-sm text-center">
-        <div className="max-w-4xl mx-auto px-4 flex flex-col md:flex-row justify-center items-center gap-6">
-          <Link href="/terms" className="hover:text-white hover:underline">利用規約</Link>
-          <Link href="/privacy" className="hover:text-white hover:underline">プライバシーポリシー</Link>
-          <a 
-            href="https://forms.google.com/your-form-url" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="hover:text-white hover:underline"
-          >
-            お問い合わせ
-          </a>
+      <footer className="bg-white border-t border-slate-300 py-12 mt-20 text-base text-center">
+        <div className="max-w-5xl mx-auto px-6">
+          <p className="font-extrabold text-slate-900 text-xl mb-6">HamamatsuEvents</p>
+          <div className="flex justify-center gap-8 mb-8">
+            <Link href="/terms" className="text-slate-600 hover:text-blue-700 font-bold">利用規約</Link>
+            <Link href="/privacy" className="text-slate-600 hover:text-blue-700 font-bold">プライバシーポリシー</Link>
+            <a href="#" className="text-slate-600 hover:text-blue-700 font-bold">お問い合わせ</a>
+          </div>
+          <p className="text-slate-500 text-sm font-medium">© 2025 Hamamatsu Event Info</p>
         </div>
-        <p className="mt-4 text-gray-500">© 2025 浜松イベント情報</p>
       </footer>
-
     </main>
   );
 }
